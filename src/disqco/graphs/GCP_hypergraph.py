@@ -451,34 +451,47 @@ class SubGraphManager:
             dummy_map = {}  # Maps p' -> dummy_node
             # print("Source partition", p)``
             
-            for idx2 in old_active_nodes - set([p]):
-                p_prime = idx2
-                print(f"Checking partition {p_prime} for subgraph {idx1}")
-                print(f"Partition {p_prime} not in new network graph, checking mapping")
-                for qpu in new_network.mapping:
-                    if p_prime in new_network.mapping[qpu]:
-                        if qpu in dummy_nodes: 
-                            dummy_map[p_prime] = dummy_map[qpu]
-                            break
-                        else:
-                            p_prime = qpu
-                            break
-                            
-                print(f"Using partition {p_prime} for dummy node creation")
-                # Create a unique dummy node
-                if p_prime not in dummy_map:
-                    dummy_node = ('dummy', p, p_prime, dummy_counter)    
-                    dummy_counter += 1
-                    counter+= 1
-                    # If your add_node expects (qubit, time), you might do a direct insertion:
-                    print("Creating dummy node for partition", p_prime, ":", dummy_node)
-                    sg.nodes.add(dummy_node)
-                    sg.node_attrs[dummy_node] = {
-                        "dummy": True,
-                        "represents_partition": p_prime
-                    }
+            # for idx2 in old_active_nodes.union(dummy_nodes) - set([p]):
+            #     p_prime = idx2
+            #     print(f"Checking partition {p_prime} for subgraph {idx1}")
+            #     print(f"Partition {p_prime} not in new network graph, checking mapping")
+            #     for qpu in new_network.mapping:
+            #         print(f' New network mapping for {qpu}: {new_network.mapping[qpu]}')
+            #         if p_prime in new_network.mapping[qpu]:
+            #             print(f"Partition {p_prime} found in mapping for {qpu}")
+            #             if p_prime in dummy_nodes:
+            #                 dummy_map[p_prime] = dummy_map[qpu]
+            #                 break
+            #             else:
+            #                 p_prime = qpu
+            #                 break
 
-                    dummy_map[p_prime] = dummy_node
+            dummy_partitions = set(new_network_graph.nodes) - set(active_nodes)
+
+            # Create a unique dummy node
+            for p_prime in dummy_partitions:
+                dummy_node = ('dummy', p, p_prime, dummy_counter)
+                dummy_counter += 1
+                counter+= 1
+                # If your add_node expects (qubit, time), you might do a direct insertion:
+                print("Creating dummy node for partition", p_prime, ":", dummy_node)
+                sg.nodes.add(dummy_node)
+                sg.node_attrs[dummy_node] = {
+                    "dummy": True,
+                    "represents_partition": p_prime
+                }
+
+                dummy_map[p_prime] = dummy_node
+
+            # Now find old dummy nodes that are not in the new network graph and find their new dummy node
+            for dummy_node in dummy_nodes:
+                if dummy_node not in new_network_graph.nodes:
+                    # Find the corresponding dummy node in the new network graph
+                    for qpu in new_network.mapping:
+                        if dummy_node in new_network.mapping[qpu]:
+                            # Use the dummy node from the mapping
+                            dummy_map[dummy_node] = dummy_map[qpu]
+                            break
 
             # dummy_map_list.append(dummy_map)
             print(f"Dummy map for partition {idx1}: {dummy_map}")

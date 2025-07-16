@@ -97,6 +97,7 @@ def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes:
                         spaces[t][part] -= 1
                     except Exception as e:
                         print(f"Error processing node {node} with sub_node {sub_node}: {e}")
+                        raise e
     
     return spaces
 
@@ -344,10 +345,10 @@ def update_counts(counts,
                   node_map=None):
     # partition = assignment[node]
     partition = assignment[node[1]][node[0]]
-    print(f'Unmapped partition: {partition}')
+    # print(f'Unmapped partition: {partition}')
     if node_map is not None:
         partition = node_map[partition]
-        print(f'Mapped partition: {partition}')
+        # print(f'Mapped partition: {partition}')
 
     new_counts = counts.copy()
     new_counts[partition] -= 1
