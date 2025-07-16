@@ -93,7 +93,13 @@ class QuantumNetwork():
         if root_nodes == [] or rec_nodes == []:
             return set(), 0
         print(f"Root nodes: {root_nodes}, Receiver nodes: {rec_nodes}")
-        if len(root_nodes):
+
+        if root_nodes == rec_nodes:
+            # If root and receiver nodes are the same, we can just return the BFS edges
+            edges = set()
+            cost = 0
+            return edges, cost
+        if len(root_nodes) == 1:
             source_nodes = root_nodes
         else:
             steiner_g = steiner_tree(self.qpu_graph, root_nodes)
