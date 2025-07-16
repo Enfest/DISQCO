@@ -6,18 +6,21 @@ from disqco.graphs.quantum_network import QuantumNetwork
 from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
 import time
 
-def set_initial_partitions(network : QuantumNetwork, num_qubits: int, depth: int, invert=False, randomise_static=False, randomise_full=False) -> list:
+def set_initial_partitions(network : QuantumNetwork, num_qubits: int, depth: int, invert=False, randomise_static=False, randomise_full=False, node_map=None) -> list:
     static_partition = []
     qpu_info = network.qpu_sizes
     num_partitions = len(qpu_info)
+    if node_map is not None:
+        inverse_node_map = {v: k for k, v in node_map.items()}
     if isinstance(qpu_info, dict):
         qpu_info = list(qpu_info.values())
     for n in range(num_partitions):
         for k in range(qpu_info[n]):
             if invert == False:
-                static_partition.append(n)
+                qpu_index = inverse_node_map[n] if node_map else n
+                static_partition.append(qpu_index)
             else:
-                static_partition.append(num_partitions-n-1)
+                static_partition.append(num_partitions-qpu_index-1)
     if randomise_static:
         np.random.permutation(static_partition)
     static_partition_reduced = static_partition[:num_qubits]
@@ -94,6 +97,28 @@ def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes:
                         spaces[t][part] -= 1
                     except Exception as e:
                         print(f"Error processing node {node} with sub_node {sub_node}: {e}")
+    
+    return spaces
+
+def find_spaces_sparse(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : QuantumCircuitHyperGraph) -> dict[int, int]:
+    """
+    Find the number of free qubits in each partition at each time step.
+    num_qubits: number of logical qubits in the circuit
+    assignment: function that maps qubits to partitions
+    network: quantum network object
+    """
+    depth = graph.depth
+    spaces = {}
+    for t in range(depth):
+        spaces[t] = {qpu : value for qpu, value in qpu_sizes.items()}
+    if graph is not None:
+        for node in graph.nodes:
+            if node[0] == 'dummy':
+                continue
+            q,t = node
+            part = assignment[t][q]
+            spaces[t][part] -= 1
+
     
     return spaces
 
@@ -212,12 +237,12 @@ def find_gain_h(hypergraph,
                 assignment_map=None, 
                 dummy_nodes = {}):
     
-    assignment_new = move_node(node,destination,assignment, assignment_map=assignment_map)
+    assignment_new = move_node(node,destination, assignment)
     edges = hypergraph.node2hyperedges[node]
     gain = 0
     for edge in edges:
         cost1 = hypergraph.get_hyperedge_attribute(edge,'cost')
-        root_config, rec_config = map_hedge_to_configs(hypergraph, edge, assignment_new, num_partitions, assignment_map=assignment_map, dummy_nodes=dummy_nodes)
+        root_config, rec_config = map_hedge_to_configs(hypergraph, edge, assignment_new, num_partitions, node_map=node_map, dummy_nodes=dummy_nodes)
         if (root_config, rec_config) not in costs:
             _, cost2 = network.steiner_forest(root_config, rec_config, node_map=node_map)
             costs[(root_config, rec_config)] = cost2
@@ -280,6 +305,30 @@ def find_all_gains_hetero(hypergraph,
                 array[(node[1],node[0],k)] = gain
     return array
 
+def find_all_gains_hetero_sparse(hypergraph,
+                          nodes,
+                          assignment,
+                          num_partitions,
+                          costs={},
+                          network: QuantumNetwork = None,
+                          active_nodes=None,
+                          node_map=None,
+                          dummy_nodes={}):
+    array = {}
+    if active_nodes is None:
+        active_nodes = set(range(num_partitions))
+    for node in nodes:
+        if node in dummy_nodes:
+            continue
+        q, t = node
+        source = assignment[t][q]
+        if source == -1:  # Skip unassigned nodes in sparse assignment
+            continue
+        for k in active_nodes - set([source]):
+            gain = find_gain_h(hypergraph,node,k,assignment,num_partitions, costs = costs, network = network, node_map=node_map, dummy_nodes=dummy_nodes)
+            array[(t,q,k)] = gain
+    return array
+
 def fill_buckets(array, max_gain):
     buckets = {}
     for i in range(-max_gain,max_gain+1):
@@ -293,14 +342,11 @@ def update_counts(counts,
                   node,
                   destination,
                   assignment,
-                  assignment_map=None):
+                  node_map=None):
     # partition = assignment[node]
-    if assignment_map is not None:
-        sub_node = assignment_map[node]
-        partition = assignment[sub_node[1]][sub_node[0]]
-    else:
-        
-        partition = assignment[node[1]][node[0]]
+    partition = assignment[node[1]][node[0]]
+    if node_map is not None:
+        partition = node_map[partition]
 
     new_counts = counts.copy()
     new_counts[partition] -= 1
@@ -681,7 +727,7 @@ def take_action_and_update_homo(hypergraph,
         if action in buckets[old_gain]:
             # print(f'Old gain in bucket - remove and add to {old_gain - i}')
             buckets[old_gain].remove(action)
-            buckets[old_gain-i].add(action)
+            buckets[old_gain - i].add(action)
             
         array[action] -= i
     
@@ -735,7 +781,7 @@ def take_action_and_update_hetero(hypergraph,
             _, cost_a = network.steiner_forest(root_config_new, rec_config_new, node_map=node_map)
             costs[(root_config_new, rec_config_new)] = cost_a
         else:
-            cost_a = costs[(root_config_new,rec_config_new)]
+            cost_a = costs[(root_config_new, rec_config_new)]
 
         root_counts_pre = root_counts
         rec_counts_pre = rec_counts
@@ -980,3 +1026,196 @@ def refine_assignment(level, num_levels, assignment, mapping_list):
             for t in mapping[super_node_t]:
                 new_assignment[t] = assignment[super_node_t]
     return new_assignment
+
+def take_action_and_update_hetero_sparse(hypergraph,
+                                  node,
+                                  destination,
+                                  array,
+                                  buckets,
+                                  num_partitions,
+                                  lock_dict,
+                                  assignment,
+                                  costs = {},
+                                  network : QuantumNetwork = None,
+                                  node_map = None):
+    
+    assignment_new = move_node(node,destination,assignment)
+    delta_gains = {}
+    for edge in hypergraph.node2hyperedges[node]:
+        
+        info = hypergraph.hyperedge_attrs[edge]
+        root_set = hypergraph.hyperedges[edge]['root_set']
+        rec_set = hypergraph.hyperedges[edge]['receiver_set']
+        # print("Info", info)
+
+        cost = info['cost']
+        # cost_new = hedge_to_cost_hetero(hypergraph,edge,assignment_new,num_partitions,costs,assignment_map=assignment_map)
+        
+        root_counts = info['root_counts']
+        # print("Root counts", root_counts)
+        rec_counts = info['rec_counts']
+        # print("Receiver counts", rec_counts)
+        if node in root_set:
+            root_counts_new, source_mapped = update_counts(root_counts,node,destination,assignment,node_map=node_map)
+            # print("Root counts new", root_counts_new)
+            root_config_new = update_config(info['root_config'],root_counts_new,source_mapped,destination)
+            # print("Root config new", root_config_new)
+            rec_counts_new = rec_counts.copy()
+            rec_config_new = tuple(copy.deepcopy(list(info['rec_config'])))
+        elif node in rec_set:
+            rec_counts_new, source_mapped = update_counts(rec_counts,node,destination,assignment,node_map=node_map)
+            # print("Receiver counts new", rec_counts_new)
+            rec_config_new = update_config(info['rec_config'],rec_counts_new,source_mapped,destination)
+            # print("Receiver config new", rec_config_new)
+            root_counts_new = root_counts.copy()
+            root_config_new = tuple(copy.deepcopy(list(info['root_config'])))
+        
+        if (root_config_new, rec_config_new) not in costs:
+            _, cost_a = network.steiner_forest(root_config_new, rec_config_new, node_map=node_map)
+            costs[(root_config_new, rec_config_new)] = cost_a
+        else:
+            cost_a = costs[(root_config_new, rec_config_new)]
+
+        root_counts_pre = root_counts
+        rec_counts_pre = rec_counts
+        
+        root_config = info['root_config']
+        rec_config = info['rec_config']
+
+        root_counts_a = root_counts_new
+        root_config_a = root_config_new
+        rec_counts_a = rec_counts_new
+        rec_config_a = rec_config_new
+
+        for next_root_node in root_set:
+            # print(f'Next root node {next_root_node}')
+            if next_root_node not in lock_dict:
+                continue
+
+            # source = assignment[next_root_node]
+            if not lock_dict[next_root_node]:
+                next_root_node_sub = next_root_node
+                source = assignment[next_root_node_sub[1]][next_root_node_sub[0]]
+                # print('Not locked')
+                for next_destination in range(num_partitions):
+                    if node_map is not None:
+                        next_destination = node_map[next_destination]
+                    if source != next_destination:
+                        next_action = (next_root_node[1], next_root_node[0], next_destination)
+
+                        next_root_counts_b, source1 = update_counts(root_counts_pre, 
+                                                                    next_root_node, 
+                                                                    next_destination, 
+                                                                    assignment, 
+                                                                    node_map=node_map)
+                        next_root_config_b = update_config(root_config, 
+                                                           next_root_counts_b, 
+                                                           source1, 
+                                                           next_destination)
+
+                        next_root_counts_ab, source2 = update_counts(root_counts_a, 
+                                                                     next_root_node, 
+                                                                     next_destination, 
+                                                                     assignment_new, 
+                                                                     node_map=node_map)
+                        next_root_config_ab = update_config(root_config_a, 
+                                                             next_root_counts_ab, 
+                                                             source2, 
+                                                             next_destination)
+
+                        if (next_root_config_b, rec_config) not in costs:
+                            _, cost_b = network.steiner_forest(next_root_config_b, rec_config, node_map=node_map)
+                            costs[(next_root_config_b, rec_config)] = cost_b
+                        else:
+                            cost_b = costs[(next_root_config_b, rec_config)]
+
+                        if (next_root_config_ab, rec_config_a) not in costs:
+                            _, cost_ab = network.steiner_forest(next_root_config_ab, rec_config_a, node_map=node_map)
+                            costs[(next_root_config_ab, rec_config_a)] = cost_ab
+                        else:
+                            cost_ab = costs[(next_root_config_ab,rec_config_a)]
+
+                        delta_gain = cost_a - cost - cost_ab + cost_b
+
+                        if next_action in delta_gains:
+                            delta_gains[next_action] += delta_gain
+                        else:
+                            delta_gains[next_action] = delta_gain
+
+        for next_rec_node in rec_set:
+            # print(f'Next receiver node {next_rec_node}')
+
+            # source = assignment[next_rec_node]
+            if next_rec_node not in lock_dict:
+                continue
+            if not lock_dict[next_rec_node]:
+
+                next_rec_node_sub = next_rec_node
+                source = assignment[next_rec_node_sub[1]][next_rec_node_sub[0]]
+                # print('Not locked')
+                for next_destination in range(num_partitions):
+                    if node_map is not None:
+                        next_destination = node_map[next_destination]
+                    if source != next_destination:
+                        next_action = (next_rec_node[1], next_rec_node[0], next_destination)
+                        
+                        next_rec_counts_b, source1 = update_counts(rec_counts_pre, 
+                                                                   next_rec_node, 
+                                                                   next_destination, 
+                                                                   assignment, 
+                                                                   node_map=node_map)
+                        next_rec_config_b = update_config(rec_config,
+                                                           next_rec_counts_b, 
+                                                           source1, 
+                                                           next_destination)
+
+                        next_rec_counts_ab, source2 = update_counts(rec_counts_a, 
+                                                                    next_rec_node, 
+                                                                    next_destination, 
+                                                                    assignment_new, 
+                                                                    node_map=node_map)
+                        
+                        next_rec_config_ab = update_config(rec_config_a, 
+                                                           next_rec_counts_ab, 
+                                                           source2, 
+                                                           next_destination)
+
+                        if (root_config, next_rec_config_b) not in costs:
+                            _, cost_b = network.steiner_forest(root_config, next_rec_config_b, node_map=node_map)
+                            costs[(root_config, next_rec_config_b)] = cost_b
+                        else:
+                            cost_b = costs[(root_config,next_rec_config_b)]
+                        if (root_config_a, next_rec_config_ab) not in costs:
+                            _, cost_ab = network.steiner_forest(root_config_a, next_rec_config_ab, node_map=node_map)
+                            costs[(root_config_a, next_rec_config_ab)] = cost_ab
+                        else:
+                            
+                            cost_ab = costs[(root_config_a,next_rec_config_ab)]
+
+                        delta_gain = cost_a - cost - cost_ab + cost_b
+
+                        if next_action in delta_gains:
+                            delta_gains[next_action] += delta_gain
+                        else:
+                            delta_gains[next_action] = delta_gain
+            
+        hypergraph.set_hyperedge_attribute(edge, 'cost', cost_a)
+        hypergraph.set_hyperedge_attribute(edge, 'root_counts', root_counts_new)
+        hypergraph.set_hyperedge_attribute(edge, 'rec_counts', rec_counts_new)
+        hypergraph.set_hyperedge_attribute(edge, 'root_config', root_config_new)
+        hypergraph.set_hyperedge_attribute(edge, 'rec_config', rec_config_new)
+            
+
+    for action in delta_gains:
+        # print(f'Action {action} Gain change {delta_gains[action]}')
+        i = delta_gains[action]
+        old_gain = array[action]
+        # print(f'Old gain {old_gain}')
+        # print(f'New gain {old_gain - i}')
+        if action in buckets[old_gain]:
+            # print(f'Old gain in bucket - remove and add to {old_gain - i}')
+            buckets[old_gain].remove(action)
+            buckets[old_gain - i].add(action)
+            
+        array[action] -= i
+    return assignment_new, array, buckets

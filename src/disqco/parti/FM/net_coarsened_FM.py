@@ -1,5 +1,5 @@
 from disqco.graphs.coarsening.network_coarsener import NetworkCoarsener
-from disqco.parti.FM.FM_hetero import run_FM_hetero_dummy
+# from disqco.parti.FM.FM_hetero import run_FM_hetero_dummy
 import multiprocessing as mp
 from disqco.parti.FM.FM_methods import set_initial_sub_partitions, order_nodes, map_assignment, calculate_full_cost_hetero
 from disqco.graphs.GCP_hypergraph import SubGraphManager
@@ -31,6 +31,52 @@ def stitch_solution(subgraphs, sub_assignments, node_maps, assignment_maps, num_
         for j in range(len(final_assignment[k])):
             if final_assignment[k][j] is None:
                 final_assignment[k][j] = final_assignment[k-1][j]
+    return final_assignment
+
+def stitch_solution_sparse(subgraphs, sub_assignments, source_qpus, num_qubits, depth):
+    """
+    Stitch together solutions from sparse subgraph assignments.
+    This version works without assignment maps by directly using the sparse assignments.
+    
+    Args:
+        subgraphs: List of subgraph objects
+        sub_assignments: List of sparse assignment matrices from each subgraph
+        source_qpus: List of source QPU IDs that each subgraph represents
+        num_qubits: Total number of qubits in original circuit
+        depth: Circuit depth
+        
+    Returns:
+        Final assignment matrix [depth][num_qubits] -> partition
+    """
+    import numpy as np
+    
+    # Initialize final assignment with -1 (unassigned)
+    final_assignment = np.full((depth, num_qubits), -1, dtype=int)
+    
+    for i, sub_assignment in enumerate(sub_assignments):
+        source_qpu = source_qpus[i]
+        subgraph = subgraphs[i]
+        
+        # For each node in the subgraph, copy its assignment if it's not -1
+        for node in subgraph.nodes:
+            if node[0] == 'dummy':
+                continue
+                
+            q, t = node
+            sparse_assignment = sub_assignment[t][q]
+            
+            # Only copy assigned nodes (skip -1 values)
+            if sparse_assignment != -1:
+                # Map the subgraph partition back to the original network partition
+                # This would need to be done based on the network coarsening hierarchy
+                final_assignment[t][q] = sparse_assignment  # Simplified mapping
+    
+    # Fill in any remaining unassigned nodes with previous layer assignment
+    for t in range(1, depth):
+        for q in range(num_qubits):
+            if final_assignment[t][q] == -1:
+                final_assignment[t][q] = final_assignment[t-1][q]
+    
     return final_assignment
 
 def run_net_coarsened_FM(graph, initial_network, l=4, multiprocessing=True, level_limit = None, passes_per_level=10):

@@ -1,4 +1,4 @@
-from disqco.parti.FM.FM_hetero import run_FM_hetero_dummy
+# from disqco.parti.FM.FM_hetero import run_FM_hetero_dummy
 from disqco.parti.FM.FM_methods import set_initial_sub_partitions, order_nodes, map_assignment
 from disqco.graphs.GCP_hypergraph import SubGraphManager
 from disqco.parti.FM.multilevel_FM import MLFM_recursive_hetero_mapped

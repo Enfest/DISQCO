@@ -122,7 +122,7 @@ def multilevel_FM(coarsened_hypergraphs,
     return list_of_assignments, list_of_costs, list_of_times
 
 from disqco.graphs.hypergraph_methods import get_all_costs_hetero, calculate_full_cost_hetero
-from disqco.parti.FM.FM_hetero import run_FM_hetero, run_FM_hetero_dummy
+from disqco.parti.FM.FM_hetero import run_FM_hetero
 from networkx import diameter
 import copy
 

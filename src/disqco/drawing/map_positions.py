@@ -425,11 +425,7 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
         qpu_sizes = list(qpu_sizes.values())
     depth = graph.depth
 
-    
-
     slot_positions = {}
-    filled_slots = set()
-
     node_positions = {}
 
     print(qpu_sizes)
@@ -467,6 +463,11 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
             
             print(f'Original node for sub-node {q,t}: {node}')
             partition = assignment[t][q]
+            
+            # Skip nodes with sparse assignment value of -1
+            if partition == -1:
+                continue
+                
             print(f'Partition for node {node} at time {t}: {partition}')
             if y is None:
                 print(f'Node has not been assigned at a previous time-step')
@@ -480,14 +481,98 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
                     y = all_free_spaces[t][partition].pop(0)
             
             slot = slot_positions.get((partition, y), None)
-
-            # if slot not in filled_slots:
-            #     filled_slots.add(slot)
-            # else:
-            #     raise ValueError(f"Slot {slot} already filled for node {node} at time {t}")
             
             node_positions[node] = slot
             print(f'Node {node} assigned to slot {slot} at time {t}')
+    return node_positions
+
+
+def find_node_layout_sparse(graph, assignment, qpu_sizes, active_nodes=None):
+    """
+    Node layout function optimized for sparse assignments.
+    Only processes active nodes and skips nodes with assignment value -1.
+    
+    Args:
+        graph: The hypergraph
+        assignment: Sparse assignment matrix [depth][num_qubits] -> partition (with -1 for inactive)
+        qpu_sizes: QPU sizes for each partition
+        active_nodes: Optional set of (q, t) nodes to process. If None, processes all nodes.
+        
+    Returns:
+        dict: node_positions mapping (q, t) -> slot_position
+    """
+    if isinstance(qpu_sizes, dict):
+        qpu_sizes = list(qpu_sizes.values())
+    depth = graph.depth
+
+    slot_positions = {}
+    node_positions = {}
+
+    # Create slot position mapping
+    y_index = 0
+    for i, qpu_size in enumerate(qpu_sizes):
+        for k in range(qpu_size):
+            y_index += 1
+            slot_positions[(i, k)] = y_index
+
+    # Initialize free spaces for each time and partition
+    all_free_spaces = []
+    for t in range(depth):
+        free_spaces = {}
+        for i, qpu_size in enumerate(qpu_sizes):
+            free_spaces[i] = [j for j in range(qpu_size)]
+        all_free_spaces.append(free_spaces)
+
+    # If active_nodes is provided, only process those nodes
+    nodes_to_process = active_nodes if active_nodes is not None else graph.nodes
+    
+    # Group nodes by qubit index to maintain y-consistency
+    qubit_nodes = {}
+    for node in nodes_to_process:
+        if isinstance(node, tuple) and len(node) == 2:
+            q, t = node
+            if q not in qubit_nodes:
+                qubit_nodes[q] = []
+            qubit_nodes[q].append((q, t))
+    
+    # Process each qubit's timeline
+    for q in sorted(qubit_nodes.keys()):
+        y = None
+        # Sort by time to maintain temporal order
+        nodes_for_qubit = sorted(qubit_nodes[q], key=lambda x: x[1])
+        
+        for node in nodes_for_qubit:
+            q, t = node
+            partition = assignment[t][q]
+            
+            # Skip nodes with sparse assignment value of -1
+            if partition == -1:
+                continue
+                
+            # Check if partition is valid
+            if partition >= len(qpu_sizes):
+                continue
+                
+            if y is None:
+                # First assignment for this qubit
+                if all_free_spaces[t][partition]:
+                    y = all_free_spaces[t][partition].pop(0)
+                else:
+                    y = 0  # Fallback if no space available
+            else:
+                # Try to maintain same y-position if possible
+                if y in all_free_spaces[t][partition]:
+                    all_free_spaces[t][partition].remove(y)
+                else:
+                    # Get next available position
+                    if all_free_spaces[t][partition]:
+                        y = all_free_spaces[t][partition].pop(0)
+                    else:
+                        y = 0  # Fallback
+            
+            slot = slot_positions.get((partition, y), y_index + 1)
+            node_positions[node] = slot
+            
     return node_positions
 
 

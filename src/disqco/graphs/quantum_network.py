@@ -84,16 +84,21 @@ class QuantumNetwork():
     def steiner_forest(self, root_config, rec_config, node_map = None):
 
         if node_map is not None:
-            root_nodes = [node_map[i] for i in range(len(root_config)) if root_config[i] == 1]
-            rec_nodes = [node_map[i] for i in range(len(rec_config)) if rec_config[i] == 1]
+            inverse_node_map = {v: k for k, v in node_map.items()}
+            root_nodes = [inverse_node_map[i] for i in range(len(root_config)) if root_config[i] == 1]
+            rec_nodes = [inverse_node_map[i] for i in range(len(rec_config)) if rec_config[i] == 1]
         else:
             root_nodes = [i for i, element in enumerate(root_config) if element == 1]
             rec_nodes = [i for i, element in enumerate(rec_config) if element == 1]
         if root_nodes == [] or rec_nodes == []:
             return set(), 0
-        steiner_g = steiner_tree(self.qpu_graph, root_nodes)
-        node_set = set(steiner_g.nodes())
-        source_nodes = list(node_set.union(root_nodes))
+        print(f"Root nodes: {root_nodes}, Receiver nodes: {rec_nodes}")
+        if len(root_nodes):
+            source_nodes = root_nodes
+        else:
+            steiner_g = steiner_tree(self.qpu_graph, root_nodes)
+            node_set = set(steiner_g.nodes())
+            source_nodes = list(node_set.union(root_nodes))
         edges = self.multi_source_bfs(source_nodes, rec_nodes)
         # edges = self.multi_source_bfs(root_nodes, rec_nodes)
         
@@ -173,8 +178,38 @@ class QuantumNetwork():
         graph = self.qpu_graph
         return nx.is_empty(nx.complement(graph))
 
-
-
+    def steiner_forest_from_sets(self, root_config_set, rec_config_set, node_map=None):
+        """
+        Steiner forest calculation using set-based configs for better performance.
+        
+        Args:
+            root_config_set: Set of partition indices with root nodes
+            rec_config_set: Set of partition indices with receiver nodes
+            node_map: Optional mapping from partition indices to network positions
+            
+        Returns:
+            tuple: (edges, cost)
+        """
+        if node_map is not None:
+            root_nodes = [node_map[i] for i in root_config_set]
+            rec_nodes = [node_map[i] for i in rec_config_set]
+        else:
+            root_nodes = list(root_config_set)
+            rec_nodes = list(rec_config_set)
+            
+        if not root_nodes or not rec_nodes:
+            return set(), 0
+        
+        
+            
+        steiner_g = steiner_tree(self.qpu_graph, root_nodes)
+        node_set = set(steiner_g.nodes())
+        source_nodes = list(node_set.union(root_nodes))
+        edges = self.multi_source_bfs(source_nodes, rec_nodes)
+        
+        cost = len(edges)
+        return edges, cost
+    
 def random_coupling(N, p):
     """
     Generates a connected graph with N nodes and edge probability p.

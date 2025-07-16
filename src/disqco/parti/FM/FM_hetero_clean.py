@@ -204,27 +204,25 @@ def FM_pass_sparse(hypergraph,
     Returns:
         tuple: (assignment_list, gain_list)
     """
-    from disqco.parti.FM.FM_methods import find_spaces_sparse, find_all_gains_hetero_sparse, fill_buckets, find_action, update_spaces, lock_node, take_action_and_update_hetero_sparse
+    from disqco.parti.FM.FM_methods import find_spaces_sparse, find_all_gains_sparse, fill_buckets, find_action, update_spaces, lock_node
     from disqco.graphs.hypergraph_methods import map_counts_and_configs_hetero
     
     # Calculate available spaces using sparse method
-    spaces = find_spaces_sparse(assignment=assignment, 
-                                qpu_sizes=qpu_info, 
-                                graph=hypergraph)
+    spaces = find_spaces_sparse(assignment, qpu_info, active_nodes)
     
     # Map counts and configs to hypergraph using sparse method with node_map
     hypergraph = map_counts_and_configs_hetero(hypergraph, assignment, num_partitions, 
-                                              network, costs,
+                                              network, costs, assignment_map=None, 
                                               node_map=node_map, dummy_nodes=dummy_nodes)
 
     # Initialize lock dictionary for all active nodes
-    lock_dict = {node: False for node in hypergraph.nodes}
+    lock_dict = {node: False for node in active_nodes}
     # Lock dummy nodes
     lock_dict.update({node: True for node in dummy_nodes})
 
     # Calculate gains for all possible moves
-    array = find_all_gains_hetero_sparse(hypergraph, hypergraph.nodes, assignment, 
-                                  num_partitions, costs, network=network, active_nodes=network.active_nodes,
+    array = find_all_gains_sparse(hypergraph, active_nodes, assignment, 
+                                  num_partitions, costs, network=network, 
                                   node_map=node_map, dummy_nodes=dummy_nodes)
     
     # Fill buckets based on gains
@@ -251,7 +249,7 @@ def FM_pass_sparse(hypergraph,
         source = assignment[t][q]
         
         # Apply the move
-        assignment_new, array, buckets = take_action_and_update_hetero_sparse(
+        assignment_new, array, buckets = take_action_and_update_sparse(
             hypergraph, node, destination, array, buckets, num_partitions,
             lock_dict, assignment, costs, network=network, 
             node_map=node_map, dummy_nodes=dummy_nodes
@@ -266,6 +264,7 @@ def FM_pass_sparse(hypergraph,
         h += 1
         
     return assignment_list, gain_list
+
 
 def run_FM_sparse(hypergraph,
                   initial_assignment,
@@ -313,12 +312,12 @@ def run_FM_sparse(hypergraph,
         from disqco.graphs.quantum_network import QuantumNetwork
         network = QuantumNetwork(qpu_info)
     
-    # if costs is None and num_partitions < 12:
-    #     from disqco.parti.FM.FM_methods import get_all_configs, get_all_costs_hetero
-    #     configs = get_all_configs(num_partitions, hetero=True)
-    #     costs, edge_trees = get_all_costs_hetero(network, configs, node_map=node_map)
-    # else:
-    costs = {}
+    if costs is None and num_partitions < 12:
+        from disqco.parti.FM.FM_methods import get_all_configs, get_all_costs_hetero
+        configs = get_all_configs(num_partitions, hetero=True)
+        costs, edge_trees = get_all_costs_hetero(network, configs, node_map=node_map)
+    else:
+        costs = {}
 
     if limit is None:
         limit = len(active_nodes) * 0.125
@@ -326,7 +325,8 @@ def run_FM_sparse(hypergraph,
     initial_assignment = np.array(initial_assignment)
     initial_cost = calculate_full_cost_hetero(hypergraph, initial_assignment, num_partitions, 
                                             costs, network=network, node_map=node_map, 
-                                            assignment_map=None, dummy_nodes=dummy_nodes)
+                                            assignment_map=None, dummy_nodes=dummy_nodes,
+                                            sparse=True)
     
     if log:
         print("Initial cost:", initial_cost)
