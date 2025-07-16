@@ -478,7 +478,7 @@ def calculate_full_cost_hetero(hypergraph : QuantumCircuitHyperGraph,
     cost = 0
     for edge in hypergraph.hyperedges:
         print("Edge", edge)
-        print("Assignment:", assignment_map)
+        print("Hyperedge info:", hypergraph.hyperedges[edge])
         root_counts, rec_counts = hedge_k_counts(hypergraph, edge, assignment, num_partitions, assignment_map=assignment_map, node_map=node_map, dummy_nodes=dummy_nodes)
         print(f"Edge {edge}: Root counts: {root_counts}, Rec counts: {rec_counts}")
         root_config, rec_config = counts_to_configs(root_counts, rec_counts)

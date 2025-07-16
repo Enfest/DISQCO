@@ -254,7 +254,7 @@ def FM_pass_sparse(hypergraph,
         assignment_new, array, buckets = take_action_and_update_hetero_sparse(
             hypergraph, node, destination, array, buckets, num_partitions,
             lock_dict, assignment, costs, network=network, 
-            node_map=node_map, dummy_nodes=dummy_nodes
+            node_map=node_map
         )
         
         # Update spaces and lock the node

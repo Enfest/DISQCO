@@ -280,7 +280,6 @@ def find_all_gains_homo(hypergraph,
             if source != k:
                 gain = find_gain(hypergraph,node,k,assignment,num_partitions, costs)
                 array[(node[1],node[0],k)] = gain
-
     return array
 
 def find_all_gains_hetero(hypergraph,
@@ -345,8 +344,10 @@ def update_counts(counts,
                   node_map=None):
     # partition = assignment[node]
     partition = assignment[node[1]][node[0]]
+    print(f'Unmapped partition: {partition}')
     if node_map is not None:
         partition = node_map[partition]
+        print(f'Mapped partition: {partition}')
 
     new_counts = counts.copy()
     new_counts[partition] -= 1
@@ -1055,17 +1056,21 @@ def take_action_and_update_hetero_sparse(hypergraph,
         # print("Root counts", root_counts)
         rec_counts = info['rec_counts']
         # print("Receiver counts", rec_counts)
+        destination_mapped = destination
+        if node_map is not None:
+            destination_mapped = node_map[destination]
         if node in root_set:
-            root_counts_new, source_mapped = update_counts(root_counts,node,destination,assignment,node_map=node_map)
+            
+            root_counts_new, source_mapped = update_counts(root_counts,node,destination_mapped,assignment,node_map=node_map)
             # print("Root counts new", root_counts_new)
-            root_config_new = update_config(info['root_config'],root_counts_new,source_mapped,destination)
+            root_config_new = update_config(info['root_config'],root_counts_new,source_mapped,destination_mapped)
             # print("Root config new", root_config_new)
             rec_counts_new = rec_counts.copy()
             rec_config_new = tuple(copy.deepcopy(list(info['rec_config'])))
         elif node in rec_set:
-            rec_counts_new, source_mapped = update_counts(rec_counts,node,destination,assignment,node_map=node_map)
+            rec_counts_new, source_mapped = update_counts(rec_counts,node,destination_mapped,assignment,node_map=node_map)
             # print("Receiver counts new", rec_counts_new)
-            rec_config_new = update_config(info['rec_config'],rec_counts_new,source_mapped,destination)
+            rec_config_new = update_config(info['rec_config'],rec_counts_new,source_mapped,destination_mapped)
             # print("Receiver config new", rec_config_new)
             root_counts_new = root_counts.copy()
             root_config_new = tuple(copy.deepcopy(list(info['root_config'])))
@@ -1086,118 +1091,115 @@ def take_action_and_update_hetero_sparse(hypergraph,
         root_config_a = root_config_new
         rec_counts_a = rec_counts_new
         rec_config_a = rec_config_new
-
+        destination_set = network.active_nodes
         for next_root_node in root_set:
             # print(f'Next root node {next_root_node}')
             if next_root_node not in lock_dict:
                 continue
+            if lock_dict[next_root_node]:
+                continue
+            source = assignment[next_root_node[1]][next_root_node[0]]
+            # print('Not locked')
+            
+            for next_destination in destination_set - {source}:
+                if node_map is not None:
+                    next_destination_mapped = node_map[next_destination]
+                next_action = (next_root_node[1], next_root_node[0], next_destination)
 
-            # source = assignment[next_root_node]
-            if not lock_dict[next_root_node]:
-                next_root_node_sub = next_root_node
-                source = assignment[next_root_node_sub[1]][next_root_node_sub[0]]
-                # print('Not locked')
-                for next_destination in range(num_partitions):
-                    if node_map is not None:
-                        next_destination = node_map[next_destination]
-                    if source != next_destination:
-                        next_action = (next_root_node[1], next_root_node[0], next_destination)
+                next_root_counts_b, source1 = update_counts(root_counts_pre, 
+                                                            next_root_node, 
+                                                            next_destination_mapped, 
+                                                            assignment, 
+                                                            node_map=node_map)
+                next_root_config_b = update_config(root_config, 
+                                                    next_root_counts_b, 
+                                                    source1, 
+                                                    next_destination_mapped)
 
-                        next_root_counts_b, source1 = update_counts(root_counts_pre, 
-                                                                    next_root_node, 
-                                                                    next_destination, 
-                                                                    assignment, 
-                                                                    node_map=node_map)
-                        next_root_config_b = update_config(root_config, 
-                                                           next_root_counts_b, 
-                                                           source1, 
-                                                           next_destination)
+                next_root_counts_ab, source2 = update_counts(root_counts_a, 
+                                                                next_root_node, 
+                                                                next_destination_mapped, 
+                                                                assignment_new, 
+                                                                node_map=node_map)
+                next_root_config_ab = update_config(root_config_a, 
+                                                        next_root_counts_ab, 
+                                                        source2, 
+                                                        next_destination_mapped)
 
-                        next_root_counts_ab, source2 = update_counts(root_counts_a, 
-                                                                     next_root_node, 
-                                                                     next_destination, 
-                                                                     assignment_new, 
-                                                                     node_map=node_map)
-                        next_root_config_ab = update_config(root_config_a, 
-                                                             next_root_counts_ab, 
-                                                             source2, 
-                                                             next_destination)
+                if (next_root_config_b, rec_config) not in costs:
+                    _, cost_b = network.steiner_forest(next_root_config_b, rec_config, node_map=node_map)
+                    costs[(next_root_config_b, rec_config)] = cost_b
+                else:
+                    cost_b = costs[(next_root_config_b, rec_config)]
 
-                        if (next_root_config_b, rec_config) not in costs:
-                            _, cost_b = network.steiner_forest(next_root_config_b, rec_config, node_map=node_map)
-                            costs[(next_root_config_b, rec_config)] = cost_b
-                        else:
-                            cost_b = costs[(next_root_config_b, rec_config)]
+                if (next_root_config_ab, rec_config_a) not in costs:
+                    _, cost_ab = network.steiner_forest(next_root_config_ab, rec_config_a, node_map=node_map)
+                    costs[(next_root_config_ab, rec_config_a)] = cost_ab
+                else:
+                    cost_ab = costs[(next_root_config_ab,rec_config_a)]
 
-                        if (next_root_config_ab, rec_config_a) not in costs:
-                            _, cost_ab = network.steiner_forest(next_root_config_ab, rec_config_a, node_map=node_map)
-                            costs[(next_root_config_ab, rec_config_a)] = cost_ab
-                        else:
-                            cost_ab = costs[(next_root_config_ab,rec_config_a)]
+                delta_gain = cost_a - cost - cost_ab + cost_b
 
-                        delta_gain = cost_a - cost - cost_ab + cost_b
-
-                        if next_action in delta_gains:
-                            delta_gains[next_action] += delta_gain
-                        else:
-                            delta_gains[next_action] = delta_gain
+                if next_action in delta_gains:
+                    delta_gains[next_action] += delta_gain
+                else:
+                    delta_gains[next_action] = delta_gain
 
         for next_rec_node in rec_set:
-            # print(f'Next receiver node {next_rec_node}')
-
-            # source = assignment[next_rec_node]
             if next_rec_node not in lock_dict:
                 continue
-            if not lock_dict[next_rec_node]:
+            if lock_dict[next_rec_node]:
+                continue
+            next_rec_node_sub = next_rec_node
+            source = assignment[next_rec_node_sub[1]][next_rec_node_sub[0]]
+            # print('Not locked')
+            for next_destination in destination_set - {source}:
 
-                next_rec_node_sub = next_rec_node
-                source = assignment[next_rec_node_sub[1]][next_rec_node_sub[0]]
-                # print('Not locked')
-                for next_destination in range(num_partitions):
-                    if node_map is not None:
-                        next_destination = node_map[next_destination]
-                    if source != next_destination:
-                        next_action = (next_rec_node[1], next_rec_node[0], next_destination)
+                if node_map is not None:
+                    next_destination_mapped = node_map[next_destination]
+
+                if source != next_destination:
+                    next_action = (next_rec_node[1], next_rec_node[0], next_destination)
+                    
+                    next_rec_counts_b, source1 = update_counts(rec_counts_pre, 
+                                                                next_rec_node, 
+                                                                next_destination_mapped, 
+                                                                assignment, 
+                                                                node_map=node_map)
+                    next_rec_config_b = update_config(rec_config,
+                                                        next_rec_counts_b, 
+                                                        source1, 
+                                                        next_destination_mapped)
+
+                    next_rec_counts_ab, source2 = update_counts(rec_counts_a, 
+                                                                next_rec_node, 
+                                                                next_destination_mapped, 
+                                                                assignment_new, 
+                                                                node_map=node_map)
+                    
+                    next_rec_config_ab = update_config(rec_config_a, 
+                                                        next_rec_counts_ab, 
+                                                        source2, 
+                                                        next_destination_mapped)
+
+                    if (root_config, next_rec_config_b) not in costs:
+                        _, cost_b = network.steiner_forest(root_config, next_rec_config_b, node_map=node_map)
+                        costs[(root_config, next_rec_config_b)] = cost_b
+                    else:
+                        cost_b = costs[(root_config,next_rec_config_b)]
+                    if (root_config_a, next_rec_config_ab) not in costs:
+                        _, cost_ab = network.steiner_forest(root_config_a, next_rec_config_ab, node_map=node_map)
+                        costs[(root_config_a, next_rec_config_ab)] = cost_ab
+                    else:
                         
-                        next_rec_counts_b, source1 = update_counts(rec_counts_pre, 
-                                                                   next_rec_node, 
-                                                                   next_destination, 
-                                                                   assignment, 
-                                                                   node_map=node_map)
-                        next_rec_config_b = update_config(rec_config,
-                                                           next_rec_counts_b, 
-                                                           source1, 
-                                                           next_destination)
+                        cost_ab = costs[(root_config_a,next_rec_config_ab)]
 
-                        next_rec_counts_ab, source2 = update_counts(rec_counts_a, 
-                                                                    next_rec_node, 
-                                                                    next_destination, 
-                                                                    assignment_new, 
-                                                                    node_map=node_map)
-                        
-                        next_rec_config_ab = update_config(rec_config_a, 
-                                                           next_rec_counts_ab, 
-                                                           source2, 
-                                                           next_destination)
+                    delta_gain = cost_a - cost - cost_ab + cost_b
 
-                        if (root_config, next_rec_config_b) not in costs:
-                            _, cost_b = network.steiner_forest(root_config, next_rec_config_b, node_map=node_map)
-                            costs[(root_config, next_rec_config_b)] = cost_b
-                        else:
-                            cost_b = costs[(root_config,next_rec_config_b)]
-                        if (root_config_a, next_rec_config_ab) not in costs:
-                            _, cost_ab = network.steiner_forest(root_config_a, next_rec_config_ab, node_map=node_map)
-                            costs[(root_config_a, next_rec_config_ab)] = cost_ab
-                        else:
-                            
-                            cost_ab = costs[(root_config_a,next_rec_config_ab)]
-
-                        delta_gain = cost_a - cost - cost_ab + cost_b
-
-                        if next_action in delta_gains:
-                            delta_gains[next_action] += delta_gain
-                        else:
-                            delta_gains[next_action] = delta_gain
+                    if next_action in delta_gains:
+                        delta_gains[next_action] += delta_gain
+                    else:
+                        delta_gains[next_action] = delta_gain
             
         hypergraph.set_hyperedge_attribute(edge, 'cost', cost_a)
         hypergraph.set_hyperedge_attribute(edge, 'root_counts', root_counts_new)

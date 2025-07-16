@@ -1,5 +1,5 @@
 from __future__ import annotations
-from disqco.drawing.map_positions import space_mapping, get_pos_list, get_pos_list_ext, space_mapping_enhanced, get_pos_list_enhanced, get_pos_list_subgraph, find_node_layout
+from disqco.drawing.map_positions import space_mapping, get_pos_list, get_pos_list_ext, space_mapping_enhanced, get_pos_list_enhanced, get_pos_list_subgraph, find_node_layout, find_node_layout_sparse
 from typing import Dict, Tuple, Iterable, Hashable, Union, List
 try:
     from IPython.core.getipython import get_ipython
@@ -23,6 +23,7 @@ def hypergraph_to_tikz(
     assignment_map= None,
     show_labels=True,
     remove_intermediate_roots=False,
+    node_map = None,
 ):
     """
     Convert a QuantumCircuitHyperGraph 'H' into a full standalone TikZ/LaTeX document,
@@ -886,8 +887,7 @@ def hypergraph_to_tikz_subgraph(
     H,
     assignment,
     qpu_info,
-    assignment_map,
-    node_map,
+    node_map=None,
     xscale=None,
     yscale=None,
     save=False,
@@ -931,14 +931,16 @@ def hypergraph_to_tikz_subgraph(
     # Calculate node scaling based on circuit size
     node_scale = min(0.6, max(0.3, 1.0 / (max(depth, num_qubits) ** 0.5)))
     small_node_scale = node_scale * 0.5
-    gate_node_scale = node_scale * 1.2
     dummy_node_scale = node_scale * 2.0  # Double the size of other nodes for dummy nodes
 
     # Build the position map for real (qubit,time) nodes using original mapping
     # Temporarily using original mapping to debug positioning issues
     # space_map = space_mapping_enhanced(qpu_sizes, depth, track_usage=True)
     # pos_list = get_pos_list_subgraph(H, num_qubits, assignment, space_map, assignment_map, node_map)
-    pos_list = find_node_layout(graph=H, assignment=assignment, qpu_sizes=qpu_info, assignment_map=assignment_map)
+    pos_list = find_node_layout_sparse(graph=H, 
+                                       assignment=assignment, 
+                                       qpu_sizes=qpu_info, 
+                                       node_map=node_map)
     # Find max time for boundary calculations
     if H.nodes:
         max_time = max(n[1] for n in H.nodes if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy")
@@ -1139,33 +1141,20 @@ def hypergraph_to_tikz_subgraph(
     for n in H.nodes:
         (x, y) = pick_position(n)
         style = pick_style(n)
-        
         # Check if it's a dummy node - do not show labels for dummy nodes
         is_dummy = isinstance(n, tuple) and len(n) >= 2 and n[0] == "dummy"
         
         if show_labels and not is_dummy:
-            if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy":
-                # Use the original node coordinates for labeling (not mapped coordinates)
-                original_q, original_t = n
-                
-                # If we have an assignment_map, find the true original coordinates
-                if assignment_map is not None:
-                    # assignment_map maps overall -> subgraph, so we need the reverse
-                    reverse_map = {v: k for k, v in assignment_map.items()}
-                    if n in reverse_map:
-                        true_original = reverse_map[n]
-                        if isinstance(true_original, tuple) and len(true_original) == 2:
-                            original_q, original_t = true_original
-                
-                label = f"$({original_q},{original_t})$"
-                tikz_code.append(
-                    f"    \\node [style={style}, label={{[nodeLabel]above:{label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
-                )
-            else:
-                tikz_code.append(
-                    f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
-                )
+            q, t = n
+            label = f"$({q},{t})$"
+            tikz_code.append(
+                f"    \\node [style={style}, label={{[nodeLabel]above:{label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
+            )
         else:
+            tikz_code.append(
+                f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
+            )
+    else:
             # No labels for dummy nodes or when show_labels is False
             tikz_code.append(
                 f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
@@ -1183,7 +1172,6 @@ def hypergraph_to_tikz_subgraph(
         # the code simply uses their coordinates from pick_position.
         if isinstance(edge_id[0], int):
             roots = edge_info['root_set']
-            
             # Find the best root node - prefer non-dummy nodes
             root_node = None
             for root in roots:
@@ -1425,8 +1413,7 @@ def draw_subgraph_tikz(
     H, 
     assignment, 
     qpu_info, 
-    assignment_map, 
-    node_map,
+    node_map=None,
     invert_colors=False, 
     fill_background=True, 
     show_labels=True,
@@ -1452,8 +1439,7 @@ def draw_subgraph_tikz(
         H,
         assignment,
         qpu_info,
-        assignment_map,
-        node_map,
+        node_map=node_map,
         save=False,
         invert_colors=invert_colors,
         fill_background=fill_background,

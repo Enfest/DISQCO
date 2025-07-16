@@ -487,7 +487,7 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
     return node_positions
 
 
-def find_node_layout_sparse(graph, assignment, qpu_sizes, active_nodes=None):
+def find_node_layout_sparse(graph, assignment, qpu_sizes, node_map=None):
     """
     Node layout function optimized for sparse assignments.
     Only processes active nodes and skips nodes with assignment value -1.
@@ -501,8 +501,8 @@ def find_node_layout_sparse(graph, assignment, qpu_sizes, active_nodes=None):
     Returns:
         dict: node_positions mapping (q, t) -> slot_position
     """
-    if isinstance(qpu_sizes, dict):
-        qpu_sizes = list(qpu_sizes.values())
+
+
     depth = graph.depth
 
     slot_positions = {}
@@ -510,21 +510,21 @@ def find_node_layout_sparse(graph, assignment, qpu_sizes, active_nodes=None):
 
     # Create slot position mapping
     y_index = 0
-    for i, qpu_size in enumerate(qpu_sizes):
+    for qpu, qpu_size in qpu_sizes.items():
         for k in range(qpu_size):
             y_index += 1
-            slot_positions[(i, k)] = y_index
+            slot_positions[(qpu, k)] = y_index
 
     # Initialize free spaces for each time and partition
-    all_free_spaces = []
+    all_free_spaces = {}
     for t in range(depth):
-        free_spaces = {}
-        for i, qpu_size in enumerate(qpu_sizes):
-            free_spaces[i] = [j for j in range(qpu_size)]
-        all_free_spaces.append(free_spaces)
+        for qpu, qpu_size in qpu_sizes.items():
+            qubit_list = [j for j in range(qpu_size)]
+            all_free_spaces[(t,qpu)] = qubit_list.copy()
+
 
     # If active_nodes is provided, only process those nodes
-    nodes_to_process = active_nodes if active_nodes is not None else graph.nodes
+    nodes_to_process = graph.nodes
     
     # Group nodes by qubit index to maintain y-consistency
     qubit_nodes = {}
@@ -540,33 +540,31 @@ def find_node_layout_sparse(graph, assignment, qpu_sizes, active_nodes=None):
         y = None
         # Sort by time to maintain temporal order
         nodes_for_qubit = sorted(qubit_nodes[q], key=lambda x: x[1])
-        
         for node in nodes_for_qubit:
             q, t = node
             partition = assignment[t][q]
-            
             # Skip nodes with sparse assignment value of -1
             if partition == -1:
                 continue
                 
             # Check if partition is valid
-            if partition >= len(qpu_sizes):
-                continue
-                
+            if partition not in qpu_sizes:
+                raise ValueError(f"Partition {partition} for node {node} exceeds QPU sizes {qpu_sizes}")
+
             if y is None:
                 # First assignment for this qubit
-                if all_free_spaces[t][partition]:
-                    y = all_free_spaces[t][partition].pop(0)
+                if all_free_spaces[(t,partition)]:
+                    y = all_free_spaces[(t,partition)].pop(0)
                 else:
                     y = 0  # Fallback if no space available
             else:
                 # Try to maintain same y-position if possible
-                if y in all_free_spaces[t][partition]:
-                    all_free_spaces[t][partition].remove(y)
+                if y in all_free_spaces[(t,partition)]:
+                    all_free_spaces[(t,partition)].remove(y)
                 else:
                     # Get next available position
-                    if all_free_spaces[t][partition]:
-                        y = all_free_spaces[t][partition].pop(0)
+                    if all_free_spaces[(t,partition)]:
+                        y = all_free_spaces[(t,partition)].pop(0)
                     else:
                         y = 0  # Fallback
             

@@ -433,55 +433,55 @@ class SubGraphManager:
         # for t in range(len(assignment)):
         #     for q in range(len(assignment[t])):
         #         print(f"Node ({q}, {t}) assignment: {assignment[t][q]}")
-        
+        old_active_nodes = set(current_network.active_nodes)
+        print(f"Old active nodes: {old_active_nodes}")
         for idx1 in range(k):
+            print(f"Processing subgraph for partition {idx1}")
             new_network = new_networks[idx1][0]
             new_network_graph = new_network.qpu_graph
             active_nodes = new_networks[idx1][1]
+            print(f"Active nodes for network {idx1}: {active_nodes}")
 
             dummy_counter = 0
             counter = 0
-            for node in active_nodes:
-                if node in current_network.qpu_graph.nodes:
-                    p = node
-                    break
+            p_s = active_nodes.intersection(current_network.qpu_graph.nodes())
+            for p in p_s:
+                break
             sg = subgraphs[idx1]
             dummy_map = {}  # Maps p' -> dummy_node
-            # print("Source partition", p)
-
-            for idx2 in range(k + len(dummy_nodes)):
-                if node_map is not None:
-                    p_prime = node_map[idx2]
-                else:
-                    p_prime = idx2 
-                if p_prime != p:
-                    if p_prime not in new_network.qpu_graph.nodes:
-                        for qpu in new_network.mapping:
-                            if p_prime in new_network.mapping[qpu]:
-                                if qpu in dummy_nodes: 
-                                    dummy_map[p_prime] = dummy_map[qpu]
-                                    break
-                                else:
-                                    p_prime = qpu
-                                    break
+            # print("Source partition", p)``
+            
+            for idx2 in old_active_nodes - set([p]):
+                p_prime = idx2
+                print(f"Checking partition {p_prime} for subgraph {idx1}")
+                print(f"Partition {p_prime} not in new network graph, checking mapping")
+                for qpu in new_network.mapping:
+                    if p_prime in new_network.mapping[qpu]:
+                        if qpu in dummy_nodes: 
+                            dummy_map[p_prime] = dummy_map[qpu]
+                            break
+                        else:
+                            p_prime = qpu
+                            break
                             
-                        
-                    # Create a unique dummy node
-                    if p_prime not in dummy_map:
-                        dummy_node = ('dummy', p, p_prime, dummy_counter)    
-                        dummy_counter += 1
-                        counter+= 1
-                        # If your add_node expects (qubit, time), you might do a direct insertion:
-                        sg.nodes.add(dummy_node)
-                        sg.node_attrs[dummy_node] = {
-                            "dummy": True,
-                            "represents_partition": p_prime
-                        }
+                print(f"Using partition {p_prime} for dummy node creation")
+                # Create a unique dummy node
+                if p_prime not in dummy_map:
+                    dummy_node = ('dummy', p, p_prime, dummy_counter)    
+                    dummy_counter += 1
+                    counter+= 1
+                    # If your add_node expects (qubit, time), you might do a direct insertion:
+                    print("Creating dummy node for partition", p_prime, ":", dummy_node)
+                    sg.nodes.add(dummy_node)
+                    sg.node_attrs[dummy_node] = {
+                        "dummy": True,
+                        "represents_partition": p_prime
+                    }
 
-                        dummy_map[p_prime] = dummy_node
+                    dummy_map[p_prime] = dummy_node
 
             # dummy_map_list.append(dummy_map)
-            
+            print(f"Dummy map for partition {idx1}: {dummy_map}")
 
         # -----------------------------
         # Step 3) Merge foreign nodes into dummy nodes
@@ -540,6 +540,7 @@ class SubGraphManager:
                             print("Q, t:", q, t
                                   )
                             print("Qsub, t_sub:", q_sub, t_sub)
+                            raise e
 
                     else:
                         node_partition = node_partition
