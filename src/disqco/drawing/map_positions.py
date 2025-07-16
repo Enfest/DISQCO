@@ -464,6 +464,8 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
                 if (q, t) not in inverse_assignment_map:
                     continue
             print(f'Sub node is in the graph: {node}')
+            
+            print(f'Original node for sub-node {q,t}: {node}')
             partition = assignment[t][q]
             print(f'Partition for node {node} at time {t}: {partition}')
             if y is None:

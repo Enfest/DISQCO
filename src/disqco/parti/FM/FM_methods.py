@@ -10,6 +10,8 @@ def set_initial_partitions(network : QuantumNetwork, num_qubits: int, depth: int
     static_partition = []
     qpu_info = network.qpu_sizes
     num_partitions = len(qpu_info)
+    if isinstance(qpu_info, dict):
+        qpu_info = list(qpu_info.values())
     for n in range(num_partitions):
         for k in range(qpu_info[n]):
             if invert == False:
@@ -87,8 +89,11 @@ def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes:
                 if node[0] != 'dummy':
                     q,t = node
                     sub_node = assignment_map[node]
-                    part = assignment[sub_node[1]][sub_node[0]]
-                    spaces[t][part] -= 1
+                    try:
+                        part = assignment[sub_node[1]][sub_node[0]]
+                        spaces[t][part] -= 1
+                    except Exception as e:
+                        print(f"Error processing node {node} with sub_node {sub_node}: {e}")
     
     return spaces
 
