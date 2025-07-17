@@ -6,7 +6,14 @@ from disqco.graphs.quantum_network import QuantumNetwork
 from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
 import time
 
-def set_initial_partitions(network : QuantumNetwork, num_qubits: int, depth: int, invert=False, randomise_static=False, randomise_full=False, node_map=None) -> list:
+def set_initial_partitions(network : QuantumNetwork, 
+                           num_qubits: int, 
+                           depth: int, 
+                           invert=False, 
+                           randomise_static=False, 
+                           randomise_full=False, 
+                           node_map=None,
+                           round_robin=False) -> list:
     static_partition = []
     qpu_info = network.qpu_sizes
     num_partitions = len(qpu_info)
@@ -14,13 +21,24 @@ def set_initial_partitions(network : QuantumNetwork, num_qubits: int, depth: int
         inverse_node_map = {v: k for k, v in node_map.items()}
     if isinstance(qpu_info, dict):
         qpu_info = list(qpu_info.values())
-    for n in range(num_partitions):
-        for k in range(qpu_info[n]):
-            if invert == False:
+    if not round_robin:
+        for n in range(num_partitions):
+            for k in range(qpu_info[n]):
+                if invert == False:
+                    qpu_index = inverse_node_map[n] if node_map else n
+                    static_partition.append(qpu_index)
+                else:
+                    static_partition.append(num_partitions-qpu_index-1)
+    else:
+        for t in range(depth):
+            static_partition = []
+            for n in range(num_qubits):
                 qpu_index = inverse_node_map[n] if node_map else n
-                static_partition.append(qpu_index)
-            else:
-                static_partition.append(num_partitions-qpu_index-1)
+                if invert == False:
+                    static_partition.append(qpu_index % num_partitions)
+                else:
+                    static_partition.append(num_partitions - (qpu_index % num_partitions) - 1)
+
     if randomise_static:
         np.random.permutation(static_partition)
     static_partition_reduced = static_partition[:num_qubits]
