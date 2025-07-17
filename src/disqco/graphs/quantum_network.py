@@ -32,6 +32,7 @@ class QuantumNetwork():
         self.qpu_graph = self.create_qpu_graph()
         self.num_qpus = len(self.qpu_sizes)
         self.mapping = {i: set([i]) for i in range(self.num_qpus)}
+        self.active_nodes = set(self.qpu_sizes.keys())
 
     def create_qpu_graph(self):
         qpu_graph = nx.Graph()
@@ -92,7 +93,7 @@ class QuantumNetwork():
             rec_nodes = [i for i, element in enumerate(rec_config) if element == 1]
         if root_nodes == [] or rec_nodes == []:
             return set(), 0
-        print(f"Root nodes: {root_nodes}, Receiver nodes: {rec_nodes}")
+        # print(f"Root nodes: {root_nodes}, Receiver nodes: {rec_nodes}")
 
         if root_nodes == rec_nodes:
             # If root and receiver nodes are the same, we can just return the BFS edges

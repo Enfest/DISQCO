@@ -13,7 +13,7 @@ def set_initial_partitions(network : QuantumNetwork,
                            randomise_static=False, 
                            randomise_full=False, 
                            node_map=None,
-                           round_robin=False) -> list:
+                           round_robin=False) -> np.ndarray:
     static_partition = []
     qpu_info = network.qpu_sizes
     num_partitions = len(qpu_info)
@@ -114,7 +114,7 @@ def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes:
                         part = assignment[sub_node[1]][sub_node[0]]
                         spaces[t][part] -= 1
                     except Exception as e:
-                        print(f"Error processing node {node} with sub_node {sub_node}: {e}")
+                        # print(f"Error processing node {node} with sub_node {sub_node}: {e}")
                         raise e
     
     return spaces
@@ -989,7 +989,7 @@ def map_assignment(node_list : list[int]):
 
     return assignment_map, sorted_node_list
 
-def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[list[int]], active_nodes, assignment_map):
+def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[list[int]], active_nodes, assignment_map) -> np.ndarray:
     """
     Set the initial partitions for the sub-network.
     """
@@ -1012,19 +1012,6 @@ def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[li
         
 
     assignment = np.array([np.array(assignment[j][:max_qubits_per_layer]) for j in range(len(assignment))])
-
-    free_indices = np.ones((len(assignment), max_qubits_per_layer), dtype=int)
-    for key in assignment_map:
-        q, t = assignment_map[key]
-        free_indices[t][q] = 0
-        # print(f'Free indices, node {key} assigned to sub node {(q,t)}')
-
-    
-    # for t in range(len(assignment)):
-    #     for q in range(len(assignment[t])):
-    #         if free_indices[t][q] == 1:
-    #             assignment[t][q] = -1
-                # print(f'Node ({q}, {t}) is free and set to -1 in assignment')
 
         
     

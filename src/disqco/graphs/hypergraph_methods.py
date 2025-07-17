@@ -42,9 +42,7 @@ def get_all_costs_hetero(network,
     costs = {}
     edge_trees = {}
     for root_config in configs:
-        print("Root config:", root_config)
         for rec_config in configs:
-            print("Receiver config:", rec_config)
             edges, cost = network.steiner_forest(root_config, rec_config, node_map=node_map)
             costs[(root_config, rec_config)] = cost
             edge_trees[(root_config, rec_config)] = edges
@@ -123,7 +121,6 @@ def hedge_k_counts(hypergraph,
             hypergraph.set_hyperedge_attribute(hedge, 'rec_counts', rec_counts)
     else:
         for root_node in root_set:
-            print("Root node:", root_node)
             if root_node not in hypergraph.nodes:
                 continue
             
@@ -141,22 +138,11 @@ def hedge_k_counts(hypergraph,
             except Exception:
                 raise ValueError
             # partition_root = assignment[root_node]
-            print("Partition root unmapped:", partition_root)
             if node_map is not None:
-                print("Node map:", node_map)
-                try:
-                    partition_root = node_map[partition_root]
-                except Exception as e:
-                    print("Assignment:", assignment
-                          )
-                    raise e
-                
-            else:
-                print("No node map")
-            print("Partition root:", partition_root)
+                partition_root = node_map[partition_root]
+
             root_counts[partition_root] += 1
         for rec_node in receiver_set:
-            print("Receiver node:", rec_node)
 
             if rec_node not in hypergraph.nodes:
                 continue
@@ -184,15 +170,9 @@ def hedge_k_counts(hypergraph,
                 #     print("Mapped node", assignment_map[node] if assignment_map is not None else node)
                 raise ValueError
             # partition_rec = assignment[rec_node]
-            print("Partition rec unmapped:", partition_rec)
             if node_map is not None:
-                print("Node map:", node_map)
-                try:
-                    partition_rec = node_map[partition_rec]
-                except Exception as e:
-                    print("Assignment:", assignment)
-                    raise e
-            print("Partition rec:", partition_rec)
+                partition_rec = node_map[partition_rec]
+
             rec_counts[partition_rec] += 1
         
         # root_counts = tuple(root_counts)
@@ -237,7 +217,7 @@ def full_config_from_counts(root_counts : tuple[int],
 
 def map_hedge_to_config(hypergraph : QuantumCircuitHyperGraph, 
                           hedge : tuple, 
-                          assignment : dict[tuple[int,int]], 
+                          assignment : np.ndarray, 
                           num_partitions : int
                           ) -> tuple[int]:
     
@@ -269,7 +249,7 @@ def get_full_config(root_config : tuple[int], rec_config : tuple[int]) -> tuple[
 
 def hedge_to_cost(hypergraph : QuantumCircuitHyperGraph, 
                    hedge : tuple, 
-                   assignment : dict[tuple[int,int]], 
+                   assignment : np.ndarray, 
                    num_partitions : int, 
                    costs : dict[tuple] = {}) -> int:
     """
@@ -290,7 +270,7 @@ def hedge_to_cost(hypergraph : QuantumCircuitHyperGraph,
 
 def hedge_to_cost_hetero(hypergraph : QuantumCircuitHyperGraph, 
                          hedge : tuple, 
-                         assignment : dict[tuple[int,int]], 
+                         assignment : np.ndarray, 
                          num_partitions : int, 
                          costs : dict[tuple] = {},
                          network = None,
@@ -309,7 +289,7 @@ def hedge_to_cost_hetero(hypergraph : QuantumCircuitHyperGraph,
     return cost
 
 def map_current_costs(hypergraph : QuantumCircuitHyperGraph, 
-                      assignment : dict[tuple[int,int]], 
+                      assignment : np.ndarray, 
                       num_partitions : int, 
                       costs: dict
                       ) -> None:
@@ -321,7 +301,7 @@ def map_current_costs(hypergraph : QuantumCircuitHyperGraph,
     return
         
 def map_counts_and_configs(hypergraph : QuantumCircuitHyperGraph, 
-                            assignment : dict[tuple[int,int]], 
+                            assignment : np.ndarray, 
                             num_partitions : int, 
                             costs: dict,
                             **kwargs) -> None:
@@ -339,7 +319,7 @@ def map_counts_and_configs(hypergraph : QuantumCircuitHyperGraph,
         return map_counts_and_configs_homo(hypergraph, assignment, num_partitions, costs=costs)
 
 def map_counts_and_configs_homo(hypergraph : QuantumCircuitHyperGraph, 
-                            assignment : dict[tuple[int,int]], 
+                            assignment : np.ndarray, 
                             num_partitions : int, 
                             costs: dict) -> None:
     """
@@ -363,7 +343,7 @@ def map_counts_and_configs_homo(hypergraph : QuantumCircuitHyperGraph,
     return hypergraph
 
 def map_counts_and_configs_hetero(hypergraph : QuantumCircuitHyperGraph,
-                                  assignment : dict[tuple[int,int]],
+                                  assignment : np.ndarray,
                                   num_partitions : int,
                                   network,
                                   costs: dict = {},
@@ -389,7 +369,7 @@ def map_counts_and_configs_hetero(hypergraph : QuantumCircuitHyperGraph,
     return hypergraph
 
 # def map_counts_and_configs_hetero_sparse(hypergraph : QuantumCircuitHyperGraph,
-#                                   assignment : dict[tuple[int,int]],
+#                                   assignment : np.ndarray,
 #                                   num_partitions : int,
 #                                   network,
 #                                   costs: dict = {},
@@ -416,7 +396,7 @@ def map_counts_and_configs_hetero(hypergraph : QuantumCircuitHyperGraph,
 #     return hypergraph
 
 def calculate_full_cost(hypergraph : QuantumCircuitHyperGraph,
-                        assignment,
+                        assignment: np.ndarray,
                         num_partitions : int,
                         costs: dict = {},
                         **kwargs) -> int:
@@ -444,7 +424,7 @@ def calculate_full_cost(hypergraph : QuantumCircuitHyperGraph,
                                             costs=costs )
 
 def calculate_full_cost_homo(hypergraph : QuantumCircuitHyperGraph,
-                        assignment : dict[tuple[int,int]],
+                        assignment : np.ndarray,
                         num_partitions : int,
                         costs: dict = {}) -> int:
     """
@@ -464,7 +444,7 @@ def calculate_full_cost_homo(hypergraph : QuantumCircuitHyperGraph,
     return cost
 
 def calculate_full_cost_hetero(hypergraph : QuantumCircuitHyperGraph, 
-                               assignment : dict[tuple[int,int]],
+                               assignment : np.ndarray,
                                num_partitions : int,
                                costs: dict = {},
                                network = None, 
@@ -477,12 +457,8 @@ def calculate_full_cost_hetero(hypergraph : QuantumCircuitHyperGraph,
     """
     cost = 0
     for edge in hypergraph.hyperedges:
-        print("Edge", edge)
-        print("Hyperedge info:", hypergraph.hyperedges[edge])
         root_counts, rec_counts = hedge_k_counts(hypergraph, edge, assignment, num_partitions, assignment_map=assignment_map, node_map=node_map, dummy_nodes=dummy_nodes)
-        print(f"Edge {edge}: Root counts: {root_counts}, Rec counts: {rec_counts}")
         root_config, rec_config = counts_to_configs(root_counts, rec_counts)
-        print(f"Root config: {root_config}, Rec config: {rec_config}")
 
         if (root_config, rec_config) in costs:
             edge_cost = costs[(root_config, rec_config)]

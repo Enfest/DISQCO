@@ -144,6 +144,7 @@ class NetworkCoarsener:
 
         for node in self.network_coarse_list[-1].qpu_graph.nodes:
             self.network_coarse_list[-1].qpu_graph.nodes[node]['level'] = 0
+            self.network_coarse_list[-1].active_nodes = set(self.network_coarse_list[-1].qpu_graph.nodes)
         
         return self.network_coarse_list
     
@@ -194,8 +195,6 @@ class NetworkCoarsener:
                     merged_something = True
                     break  # Start over with new edge list
         
-
-
     def unmerge_nodes(self, g0 : nx.Graph, source_node : int, mapping : dict[int,set[int]], level : int, active_nodes):
 
 
@@ -311,23 +310,24 @@ class NetworkCoarsener:
     #         network_list.append([network_new, active_nodes])
                 
     #     return network_list
-    
-    def cut_network(self, networks_previous_level, level : int = 0):
+
+    def cut_network(self, networks_previous_level : dict[int, QuantumNetwork], level : int = 0):
         """
         Cut the network into two sub-networks based on the coarse network.
         """
         # Create a new network with the same structure as the original
-        network_list = []
+        new_network_dict = {}
         # network_coarse = self.network_coarse_list[-level-1]
         # mapping = network_coarse.mapping
         # active_nodes = set([sub_node for sub_node in network_coarse.qpu_graph.nodes if sub_node in mapping])
-        for network in networks_previous_level:
-            network_coarse = network[0]
+        for source_node, network_coarse in networks_previous_level.items():
             active_nodes = network_coarse.active_nodes
+            print(f"Active nodes at level {level}: {active_nodes}")
+            # Initialise list to store child networks
             for node in active_nodes:
                 new_graph = network_coarse.qpu_graph.copy()
                 mapping = network_coarse.mapping
-                
+                print(f"Cutting network at level {level} for node {node}")
                 new_graph, qpu_sizes, new_mapping, new_active_nodes = self.unmerge_nodes(new_graph, node, mapping, level=level, active_nodes=active_nodes)
                 connectivity = []
 
@@ -336,6 +336,6 @@ class NetworkCoarsener:
                 network_new = QuantumNetwork(qpu_sizes, connectivity)
                 network_new.mapping = new_mapping
                 network_new.active_nodes = new_active_nodes
-                network_list.append([network_new, new_active_nodes])
-                
-        return network_list
+                new_network_dict[node] = network_new
+
+        return new_network_dict
