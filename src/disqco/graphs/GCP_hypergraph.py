@@ -70,7 +70,10 @@ class QuantumCircuitHyperGraph:
         # Remove the node itself
         self.nodes.remove(node)
         del self.node_attrs[node]
-    
+        del self.node2hyperedges[node]
+        # Also remove from adjacency
+        if node in self.adjacency:
+            del self.adjacency[node]
     def remove_hyperedge(self, edge_id):
         """
         Remove a hyperedge from the graph.
@@ -529,6 +532,17 @@ class SubGraphManager:
                             if changed:
                                 sg.node2hyperedges[node].discard(edge_id)
                                 sg.node2hyperedges[dummy_node].add(edge_id)
+                                sg.adjacency[node].discard(dummy_node)
+                                sg.adjacency[dummy_node].add(node)
+                                
+                                # Now need to replace all occurrences of `node` in the adjacency list with `dummy_node`
+                                for nbr in sg.adjacency[node]:
+                                    sg.adjacency[nbr].discard(node)
+                                    sg.adjacency[nbr].add(dummy_node)
+                                    
+                                
+
+
 
                     # Finally, remove the foreign node from the subgraph
                     sg.remove_node(node)

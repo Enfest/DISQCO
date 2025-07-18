@@ -128,14 +128,18 @@ def find_spaces_sparse(assignment : np.ndarray, qpu_sizes: dict[int, int], graph
     """
     depth = graph.depth
     spaces = {}
+    print("QPU sizes:", qpu_sizes)
     for t in range(depth):
         spaces[t] = {qpu : value for qpu, value in qpu_sizes.items()}
+        print(f"Initial spaces at time {t}: {spaces[t]}")
+    
     if graph is not None:
         for node in graph.nodes:
             if node[0] == 'dummy':
                 continue
             q,t = node
             part = assignment[t][q]
+            print(f"Processing node {node} with partition {part} at time {t}")
             spaces[t][part] -= 1
 
     

@@ -549,7 +549,8 @@ def find_node_layout_sparse(graph, assignment, qpu_sizes, node_map=None):
                 
             # Check if partition is valid
             if partition not in qpu_sizes:
-                raise ValueError(f"Partition {partition} for node {node} exceeds QPU sizes {qpu_sizes}")
+                continue
+                # raise ValueError(f"Partition {partition} for node {node} exceeds QPU sizes {qpu_sizes}")
 
             if y is None:
                 # First assignment for this qubit

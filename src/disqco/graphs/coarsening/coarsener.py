@@ -183,7 +183,7 @@ class HypergraphCoarsener:
 
         return H_new
    
-    def merge_nods_by_key(self, hypergraph, source_node, target_node):
+    def merge_nodes_by_key(self, hypergraph, source_node, target_node):
         H_new = hypergraph
         # print("merging nodes", source_node, target_node)
         old_node_type = H_new.get_node_attribute(source_node, "type")
@@ -275,7 +275,7 @@ class HypergraphCoarsener:
                 # print("New node not in hypergraph, skipping.")
                 continue
             
-            self.merge_nods_by_key(H_new, old_node, new_node)
+            self.merge_nodes_by_key(H_new, old_node, new_node)
 
 
         return H_new
@@ -754,14 +754,9 @@ class HypergraphCoarsener:
         H_list = [H_current]
         mapping_list = [copy.deepcopy(mapping)]
         while True:
-            # print("Current mapping:", mapping)
-            # Identify current max layer
 
             current_layers = sorted(mapping.keys())
-
-
-            # print("Time to sort layers:", time.time() - start)
-
+            
             if len(current_layers) <= 1:
                 break
             pairs_to_merge = []
@@ -772,18 +767,13 @@ class HypergraphCoarsener:
                 target = rev[i+1]
                 pairs_to_merge.append((source, target))
 
+            H_current = self.contract_batch(H_current, pairs_to_merge)
+
             for (src, tgt) in pairs_to_merge:
                 mapping = self.update_mapping(mapping, src, tgt)
-            H_current = self.contract_batch(H_current, pairs_to_merge)
-            # print("Time to perform all contractions:", time.time() - start_outer)
 
-            H_list.append(H_current)
+            H_list.append(copy.deepcopy(H_current))
             mapping_list.append(copy.deepcopy(mapping))
-
-            current_layers = sorted(mapping.keys())
-            if len(current_layers) <= 1:
-                break
-        
 
         return H_list, mapping_list
     
@@ -900,15 +890,7 @@ class HypergraphCoarsener:
             layer_nodes = [(node_list[source][i], source) for i in range(len(node_list[source]))]
             print("Layer nodes for source:", layer_nodes)
             for i, old_node in enumerate(layer_nodes):
-                # If target layer doesn't exist or doesn't have index i, skip
-                if i >= len(node_list[target]):
-                    continue
                 new_node = (node_list[target][i], target)
-
-                # If new_node not in the hypergraph at all, skip
-                if new_node not in rep:
-                    continue
-
                 # "Unify" old_node into whatever new_node currently maps to
                 final_tgt = rep[new_node]
                 rep[old_node] = final_tgt
@@ -974,3 +956,130 @@ class HypergraphCoarsener:
         new_H.node_attrs = new_node_attrs
 
         return new_H
+
+    def coarsen_recursive_subgraph(self, hypergraph, assignment):
+        """
+        Repeatedly coarsen a subgraph hypergraph by contracting layer i into i-1
+        in a pairwise fashion, handling dummy nodes appropriately.
+        
+        For subgraphs with dummy nodes:
+        - Regular nodes contract with their temporal partners (same qubit index)  
+        - If no temporal partner exists, contract with appropriate dummy node
+        - Dummy nodes themselves don't get contracted but serve as targets
+        
+        Args:
+            hypergraph: QuantumCircuitHyperGraph subgraph to coarsen
+            dummy_nodes: Set of dummy nodes in the subgraph
+            
+        Returns:
+            H_list: List of coarsened hypergraphs at each level
+            mapping_list: List of time layer mappings at each level
+        """
+        dummy_nodes = set()
+        for node in hypergraph.nodes:
+            if isinstance(node, tuple) and len(node) >= 3 and node[0] == 'dummy':
+                dummy_nodes.add(node)
+                
+        print("Dummy nodes found:", dummy_nodes)
+        H_current = hypergraph.copy()
+        H_init = hypergraph.copy()
+        
+        # Get the actual depth from the subgraph
+        time_steps = set()
+        for node in H_current.nodes:
+            if isinstance(node, tuple) and len(node) >= 2:
+                time_steps.add(node[1])
+        
+        if not time_steps:
+            return [H_init], [{}]
+            
+        depth = max(time_steps) + 1
+        mapping = {i: {i} for i in range(depth)}
+        
+        H_list = [H_init]
+        mapping_list = [mapping.copy()]
+        
+        while True:
+            current_layers = sorted(mapping.keys())
+            
+            if len(current_layers) <= 1:
+                break
+                
+            pairs_to_merge = []
+            rev = current_layers[::-1]  # Reverse to start from highest time
+            
+            for i in range(0, len(rev)-1, 2):
+                source = rev[i]
+                target = rev[i+1]
+                pairs_to_merge.append((source, target))
+            
+            for (src, tgt) in pairs_to_merge:
+                H_current = self.contract_time_subgraph(H_current, src, tgt, dummy_nodes)
+                mapping = self.update_mapping(mapping, src, tgt)
+
+            # Draw for debugging
+            
+            H_list.append(H_current)
+            mapping_list.append(mapping.copy())
+            
+            current_layers = sorted(mapping.keys())
+            if len(current_layers) <= 1:
+                break
+                
+        return H_list, mapping_list
+
+    def contract_time_subgraph(self, hypergraph, source_time, target_time, dummy_nodes):
+        """
+        Contract all nodes at source_time into target_time, handling dummy nodes.
+        
+        For each node at source_time:
+        1. If it's a dummy node, skip contraction
+        2. If a corresponding target node exists (same qubit index), contract to it
+        3. If no target exists, contract to appropriate dummy node
+        
+        Args:
+            hypergraph: The subgraph hypergraph
+            source_time: Time layer to contract from
+            target_time: Time layer to contract into
+            dummy_nodes: Set of dummy nodes that shouldn't be contracted
+            
+        Returns:
+            H_new: New hypergraph with contracted nodes
+        """
+        H_new = hypergraph.copy()
+        
+        # Get all nodes in the source time layer
+        source_nodes = set([node for node in H_new.nodes
+                       if isinstance(node, tuple) and len(node) >= 2 and node[1] == source_time])
+
+        
+        # Process each source node
+        for old_node in source_nodes:
+            print("Contracting node:", old_node)
+                
+            # Extract qubit index from the node
+            if isinstance(old_node, tuple) and len(old_node) >= 2:
+                qubit_idx = old_node[0]
+
+                target_node = (qubit_idx, target_time)  # Target node at target_time with same qubit index
+
+                if target_node in H_new.nodes:
+                    print("Found target node:", target_node)
+                    self.merge_nodes_by_key(H_new, old_node, target_node)
+                else:
+                    # No temporal partner found - check edges to find connected dummy node
+                    dummy_target = None
+                    print(f' Must merge into a dummy node for {old_node} at time {target_time}')
+                    # Check adjacency to find connected dummy nodes
+                    if old_node in H_new.adjacency:
+                        for neighbor in H_new.adjacency[old_node]:
+                            print("Checking neighbor:", neighbor)
+                            if neighbor in dummy_nodes:
+                                dummy_target = neighbor
+                                print("Found dummy target:", dummy_target)
+                                break
+
+                    self.merge_nodes_by_key(H_new, old_node, dummy_target)
+
+        
+        return H_new
