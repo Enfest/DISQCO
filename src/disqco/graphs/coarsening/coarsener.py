@@ -247,7 +247,7 @@ class HypergraphCoarsener:
             del H_new.node_attrs[source_node]
 
         return H_new
-
+    
     def contract_time_mapped(self, hypergraph, source, target, node_list):
         """
         Contract all nodes at time = index1 into nodes at time = index2,
@@ -888,7 +888,6 @@ class HypergraphCoarsener:
                 continue
                 
             layer_nodes = [(node_list[source][i], source) for i in range(len(node_list[source]))]
-            print("Layer nodes for source:", layer_nodes)
             for i, old_node in enumerate(layer_nodes):
                 new_node = (node_list[target][i], target)
                 # "Unify" old_node into whatever new_node currently maps to
@@ -906,30 +905,50 @@ class HypergraphCoarsener:
             rv = rep[v]
             new_nodes.add(rv)
 
-        # Build hyperedges by remapping root/receiver sets
+        # Build hyperedges by remapping root/receiver sets and identify edges to remove
+        edges_to_remove = set()
         for e_id, e_data in hypergraph.hyperedges.items():
             new_roots = {rep[x] for x in e_data["root_set"]}
             new_recs = {rep[x] for x in e_data["receiver_set"]}
-            # Skip self-loop or trivial edges
+            all_nodes_in_edge = new_roots.union(new_recs)
+            
+            # Remove self-loop edges (same logic as merge_nodes_by_key)
+            if len(all_nodes_in_edge) == 2:
+                nodes_list = list(all_nodes_in_edge)
+                if nodes_list[0] == nodes_list[1]:  # Both nodes became the same after merging
+                    edges_to_remove.add(e_id)
+                    continue
+            
+            # Skip trivial edges where root and receiver sets are identical
             if new_roots == new_recs:
+                edges_to_remove.add(e_id)
                 continue
+                
             new_hyperedges[e_id] = {
                 "root_set": new_roots,
                 "receiver_set": new_recs
             }
 
-        # Build adjacency from the new hyperedges only
+        # Build adjacency by updating existing relationships (matching merge_nodes_by_key approach)
         from collections import defaultdict
         new_adjacency = defaultdict(set)
+        
+        # Initialize adjacency for all new nodes
         for rv in new_nodes:
             new_adjacency[rv] = set()
-        for e_id, e_data in new_hyperedges.items():
-            roots, recs = e_data["root_set"], e_data["receiver_set"]
-            for r in roots:
-                for t in recs:
-                    if r != t:
-                        new_adjacency[r].add(t)
-                        new_adjacency[t].add(r)
+            
+        # Build adjacency from existing adjacency structure, mapping through representatives
+        for old_node, neighbors in hypergraph.adjacency.items():
+            if old_node not in rep:
+                continue
+            old_rep = rep[old_node]
+            for neighbor in neighbors:
+                if neighbor not in rep:
+                    continue
+                neighbor_rep = rep[neighbor]
+                if old_rep != neighbor_rep:  # Avoid self-loops
+                    new_adjacency[old_rep].add(neighbor_rep)
+                    new_adjacency[neighbor_rep].add(old_rep)
 
         # Build node2hyperedges
         new_node2hyperedges = defaultdict(set)
@@ -956,8 +975,8 @@ class HypergraphCoarsener:
         new_H.node_attrs = new_node_attrs
 
         return new_H
-
-    def coarsen_recursive_subgraph(self, hypergraph, assignment):
+    
+    def coarsen_recursive_subgraph(self, hypergraph):
         """
         Repeatedly coarsen a subgraph hypergraph by contracting layer i into i-1
         in a pairwise fashion, handling dummy nodes appropriately.
@@ -980,7 +999,6 @@ class HypergraphCoarsener:
             if isinstance(node, tuple) and len(node) >= 3 and node[0] == 'dummy':
                 dummy_nodes.add(node)
                 
-        print("Dummy nodes found:", dummy_nodes)
         H_current = hypergraph.copy()
         H_init = hypergraph.copy()
         
@@ -1017,8 +1035,10 @@ class HypergraphCoarsener:
                 H_current = self.contract_time_subgraph(H_current, src, tgt, dummy_nodes)
                 mapping = self.update_mapping(mapping, src, tgt)
 
-            # Draw for debugging
-            
+            # # Draw for debugging 
+            # fig = draw_subgraph_tikz(H_current, assignment, qpu_sizes, node_map)
+            # display(fig)
+
             H_list.append(H_current)
             mapping_list.append(mapping.copy())
             
@@ -1050,13 +1070,14 @@ class HypergraphCoarsener:
         
         # Get all nodes in the source time layer
         source_nodes = set([node for node in H_new.nodes
-                       if isinstance(node, tuple) and len(node) >= 2 and node[1] == source_time])
+                        if isinstance(node, tuple) and len(node) == 2 and node[1] == source_time])
 
         
         # Process each source node
+        # print(f"Contracting time layer {source_time} into {target_time} with {(source_nodes)} nodes")
+        # print(f"Dummy nodes: {dummy_nodes}")
         for old_node in source_nodes:
-            print("Contracting node:", old_node)
-                
+            # print(f"Processing node {old_node} at time {source_time}")
             # Extract qubit index from the node
             if isinstance(old_node, tuple) and len(old_node) >= 2:
                 qubit_idx = old_node[0]
@@ -1064,22 +1085,259 @@ class HypergraphCoarsener:
                 target_node = (qubit_idx, target_time)  # Target node at target_time with same qubit index
 
                 if target_node in H_new.nodes:
-                    print("Found target node:", target_node)
+                    # print(f"Found temporal partner {target_node} for {old_node}")
                     self.merge_nodes_by_key(H_new, old_node, target_node)
                 else:
                     # No temporal partner found - check edges to find connected dummy node
                     dummy_target = None
-                    print(f' Must merge into a dummy node for {old_node} at time {target_time}')
                     # Check adjacency to find connected dummy nodes
                     if old_node in H_new.adjacency:
-                        for neighbor in H_new.adjacency[old_node]:
-                            print("Checking neighbor:", neighbor)
-                            if neighbor in dummy_nodes:
-                                dummy_target = neighbor
-                                print("Found dummy target:", dummy_target)
-                                break
-
+                        neighbors = H_new.adjacency[old_node]
+                        dummy_node_neighbours = neighbors.intersection(dummy_nodes)
+                        for dummy_target in dummy_node_neighbours:
+                            break
+                    # print("DUmmy target:", dummy_target)
                     self.merge_nodes_by_key(H_new, old_node, dummy_target)
 
         
         return H_new
+
+    def coarsen_recursive_subgraph_batch(self, hypergraph):
+        """
+        Optimized batch version of coarsen_recursive_subgraph that minimizes copying
+        and uses batch operations for better performance on large subgraphs.
+        
+        For subgraphs with dummy nodes:
+        - Regular nodes contract with their temporal partners (same qubit index)  
+        - If no temporal partner exists, contract with appropriate dummy node
+        - Dummy nodes themselves don't get contracted but serve as targets
+        
+        Args:
+            hypergraph: QuantumCircuitHyperGraph subgraph to coarsen
+            
+        Returns:
+            H_list: List of coarsened hypergraphs at each level
+            mapping_list: List of time layer mappings at each level
+        """
+        dummy_nodes = set()
+        for node in hypergraph.nodes:
+            if isinstance(node, tuple) and len(node) >= 3 and node[0] == 'dummy':
+                dummy_nodes.add(node)
+                
+        H_current = hypergraph.copy()  # Only one initial copy
+        
+        # Get the actual depth from the subgraph
+        time_steps = set()
+        for node in H_current.nodes:
+            if isinstance(node, tuple) and len(node) >= 2:
+                time_steps.add(node[1])
+        
+        if not time_steps:
+            return [H_current], [{}]
+            
+        depth = max(time_steps) + 1
+        mapping = {i: {i} for i in range(depth)}  # Use set literals for efficiency
+        
+        H_list = [H_current]
+        mapping_list = [mapping.copy()]  # Shallow copy is sufficient
+        
+        while True:
+            current_layers = sorted(mapping.keys())
+            
+            if len(current_layers) <= 1:
+                break
+                
+            pairs_to_merge = []
+            rev = current_layers[::-1]  # More efficient than reversed()
+            
+            for i in range(0, len(rev)-1, 2):
+                source = rev[i]
+                target = rev[i+1]
+                pairs_to_merge.append((source, target))
+            
+            # Update mapping first (this is fast)
+            for (src, tgt) in pairs_to_merge:
+                mapping[tgt] = mapping[tgt].union(mapping[src])
+                del mapping[src]
+            
+            # Perform batch contraction
+            H_current = self.contract_time_subgraph_batch(H_current, pairs_to_merge, dummy_nodes)
+
+            H_list.append(H_current)
+            mapping_list.append(mapping.copy())  # Shallow copy
+            
+            current_layers = sorted(mapping.keys())
+            if len(current_layers) <= 1:
+                break
+                
+        return H_list, mapping_list
+
+    def contract_time_subgraph_batch(self, hypergraph, merges, dummy_nodes):
+        """
+        Optimized batch version of contract_time_subgraph that processes multiple
+        time layer contractions efficiently in a single pass.
+        
+        Args:
+            hypergraph: The subgraph hypergraph
+            merges: List of (source_time, target_time) pairs to contract
+            dummy_nodes: Set of dummy nodes that shouldn't be contracted
+            
+        Returns:
+            H_new: New hypergraph with all contractions applied
+        """
+        if not merges:
+            return hypergraph
+            
+        # Build representative map: old_node -> representative_node
+        rep = {v: v for v in hypergraph.nodes}
+        
+        # Process all merges to build the representative mapping
+        for (source_time, target_time) in merges:
+            # Get all nodes in the source time layer
+            source_nodes = [node for node in hypergraph.nodes
+                           if isinstance(node, tuple) and len(node) == 2 and node[1] == source_time]
+            
+            # Process each source node
+            for old_node in source_nodes:
+                # Extract qubit index from the node
+                if isinstance(old_node, tuple) and len(old_node) >= 2:
+                    qubit_idx = old_node[0]
+                    target_node = (qubit_idx, target_time)  # Target node at target_time with same qubit index
+
+                    if target_node in hypergraph.nodes:
+                        # Direct temporal merge
+                        final_tgt = rep[target_node]
+                        rep[old_node] = final_tgt
+                    else:
+                        # No temporal partner found - check edges to find connected dummy node
+                        dummy_target = None
+                        # Check adjacency to find connected dummy nodes
+                        if old_node in hypergraph.adjacency:
+                            for neighbor in hypergraph.adjacency[old_node]:
+                                if neighbor in dummy_nodes:
+                                    dummy_target = neighbor
+                                    break
+                        
+                        if dummy_target:
+                            final_tgt = rep[dummy_target]
+                            rep[old_node] = final_tgt
+        
+        # Create new data structures
+        circuit = hypergraph.circuit
+        new_nodes = set()
+        new_hyperedges = {}
+        new_node_attrs = {}
+
+        # Build the new node set
+        for v in hypergraph.nodes:
+            rv = rep[v]
+            new_nodes.add(rv)
+
+        # Build hyperedges by remapping root/receiver sets and identify edges to remove
+        # First pass: identify edges to remove (matching merge_nodes_by_key logic)
+        edges_to_remove = set()
+        
+        # For each merge operation, check which edges need to be removed
+        for (source_time, target_time) in merges:
+            source_nodes = [node for node in hypergraph.nodes
+                           if isinstance(node, tuple) and len(node) == 2 and node[1] == source_time]
+            
+            for old_node in source_nodes:
+                if isinstance(old_node, tuple) and len(old_node) >= 2:
+                    qubit_idx = old_node[0]
+                    target_node = (qubit_idx, target_time)
+                    
+                    # Determine what the old_node will merge into
+                    if target_node in hypergraph.nodes:
+                        merge_target = target_node
+                    else:
+                        # Find connected dummy node
+                        merge_target = None
+                        if old_node in hypergraph.adjacency:
+                            for neighbor in hypergraph.adjacency[old_node]:
+                                if neighbor in dummy_nodes:
+                                    merge_target = neighbor
+                                    break
+                        # if not merge_target:
+                        #     continue  # Skip if no merge target
+                    
+                    # Check edges involving old_node (same logic as merge_nodes_by_key)
+                    if old_node in hypergraph.node2hyperedges:
+                        for e_id in hypergraph.node2hyperedges[old_node]:
+                            if e_id in edges_to_remove:
+                                continue
+                            if e_id not in hypergraph.hyperedges:
+                                continue
+                            edge_data = hypergraph.hyperedges[e_id]
+                            root_s = edge_data["root_set"]
+                            rec_s = edge_data["receiver_set"]
+                            all_nodes_in_edge = root_s.union(rec_s)
+                            
+                            # Same logic as merge_nodes_by_key: if edge has 2 nodes and target is in it
+                            if len(all_nodes_in_edge) == 2:
+                                if merge_target in all_nodes_in_edge:
+                                    edges_to_remove.add(e_id)
+        
+        # Second pass: build new hyperedges, skipping removed ones
+        for e_id, e_data in hypergraph.hyperedges.items():
+            if e_id in edges_to_remove:
+                continue
+                
+            new_roots = {rep[x] for x in e_data["root_set"]}
+            new_recs = {rep[x] for x in e_data["receiver_set"]}
+            
+            # Skip trivial edges where root and receiver sets are identical
+            if new_roots == new_recs:
+                continue
+                
+            new_hyperedges[e_id] = {
+                "root_set": new_roots,
+                "receiver_set": new_recs
+            }
+
+        # Build adjacency by updating existing relationships (matching merge_nodes_by_key approach)
+        from collections import defaultdict
+        new_adjacency = defaultdict(set)
+        
+        # Initialize adjacency for all new nodes
+        for rv in new_nodes:
+            new_adjacency[rv] = set()
+            
+        # Build adjacency from existing adjacency structure, mapping through representatives
+        for old_node, neighbors in hypergraph.adjacency.items():
+            if old_node not in rep:
+                continue
+            old_rep = rep[old_node]
+            for neighbor in neighbors:
+                if neighbor not in rep:
+                    continue
+                neighbor_rep = rep[neighbor]
+                if old_rep != neighbor_rep:  # Avoid self-loops
+                    new_adjacency[old_rep].add(neighbor_rep)
+                    new_adjacency[neighbor_rep].add(old_rep)
+
+        # Build node2hyperedges
+        new_node2hyperedges = defaultdict(set)
+        for rv in new_nodes:
+            new_node2hyperedges[rv] = set()
+        for e_id, e_data in new_hyperedges.items():
+            involved = e_data["root_set"] | e_data["receiver_set"]
+            for node in involved:
+                new_node2hyperedges[node].add(e_id)
+
+        # Build node attributes
+        for rv in new_nodes:
+            new_node_attrs[rv] = {}
+        for v, attrs in hypergraph.node_attrs.items():
+            rv = rep[v]
+            new_node_attrs[rv].update(attrs)
+            
+        # Construct the new hypergraph object
+        new_H = QuantumCircuitHyperGraph(circuit=circuit, map_circuit=False)
+        new_H.nodes = new_nodes
+        new_H.hyperedges = new_hyperedges
+        new_H.adjacency = new_adjacency
+        new_H.node2hyperedges = new_node2hyperedges
+        new_H.node_attrs = new_node_attrs
+
+        return new_H

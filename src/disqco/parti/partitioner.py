@@ -52,6 +52,8 @@ class QuantumCircuitPartitioner:
 
         graph_list, mapping_list = coarsener(hypergraph=graph)
 
+        full_graph = graph_list[0]
+
         if self.initial_assignment is not None:
             assignment = self.initial_assignment.copy()
         else:
@@ -83,15 +85,15 @@ class QuantumCircuitPartitioner:
             best_cost_level = results['best_cost']
             best_assignment_level = results['best_assignment']
 
-            if best_cost_level < best_cost:
-            # Keep track of the result
-                best_cost = best_cost_level
-                assignment = best_assignment_level
+            # if best_cost_level < best_cost:
+            # # Keep track of the result
+            best_cost = best_cost_level
+            assignment = best_assignment_level
 
             # if log:
             print(f'Best cost at level {i}: {best_cost}')
 
-            refined_assignment = self.refine_assignment(i, len(graph_list), assignment, mapping_list)
+            refined_assignment = self.refine_assignment(i, len(graph_list), assignment, mapping_list, sparse=kwargs.get('sparse', False), full_subgraph=full_graph)
             assignment = refined_assignment
             kwargs['seed_partitions'] = [assignment]
 
@@ -106,12 +108,31 @@ class QuantumCircuitPartitioner:
 
         return results
 
-    def refine_assignment(self, level, num_levels, assignment, mapping_list):
+    def refine_assignment(self, level, num_levels, assignment, mapping_list, sparse=False, full_subgraph=None):
+        print(f"Refining assignment at level {level} of {num_levels} with sparse={sparse}")
         new_assignment = assignment
         if level < num_levels -1:
             mapping = mapping_list[level]
             for super_node_t in mapping:
                 for t in mapping[super_node_t]:
-                    new_assignment[t] = assignment[super_node_t]
+                    if not sparse:
+                        new_assignment[t] = assignment[super_node_t]
+                    else:
+                        for q in range(len(assignment[0])):
+                            if (q, t) in full_subgraph.nodes and (q, super_node_t) in full_subgraph.nodes:
+                                new_assignment[t][q] = assignment[super_node_t][q]
         return new_assignment
+    
+    # def refine_assignment_sparse(self, level, num_levels, assignment, mapping_list, subgraph):
+    #     new_assignment = assignment
+    #     if level < num_levels - 1:
+    #         mapping = mapping_list[level]
+    #         for super_node_t in mapping:
+    #             for t in mapping[super_node_t]:
+    #                 for q in range(len(assignment[0])):
+    #                     if (q,t) in subgraph.nodes and (q, super_node_t) in subgraph.nodes:
+    #                         if t < len(new_assignment) and super_node_t < len(assignment):
+    #                             new_assignment[t][q] = assignment[super_node_t][q]
+
+    #     return new_assignment
         

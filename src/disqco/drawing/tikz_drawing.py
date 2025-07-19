@@ -555,8 +555,10 @@ def hypergraph_to_tikz_v2(
             _, p, pprime = node
             # Example: place them in a single row at y = num_qubits_phys+2
             # and x offset = partition p + some shift
+            print(f"Dummy node: {node}")
             x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2  # scale horizontally by pprime
             y = (-2) * yscale * 0.8
+            print(f"Dummy node position: (x={x}, y={y})")
             return (x, y)
         # else:
         #     # If for some reason it's a dummy node of a different shape:
@@ -1011,70 +1013,31 @@ def hypergraph_to_tikz_subgraph(
 
     def pick_position(node):
         # Handle dummy nodes - place them on the boundaries
-        if isinstance(node, tuple) and len(node) >= 2 and node[0] == "dummy":
+        if isinstance(node, tuple) and len(node) > 2 and node[0] == "dummy":
             print(f"Processing dummy node: {node}")
             dummy_vertical_shift = 3.0 * yscale  # Even larger shift to make dummies more visible
+
+            partition = node[2]
             
-            if len(node) >= 4:  # ("dummy", q_idx, t_idx, partition) or similar
-                q_idx = node[1] if len(node) > 1 else 0
-                t_idx = node[2] if len(node) > 2 else 0
-                partition = node[3] if len(node) > 3 else 0
-                
-                # Place dummy nodes clearly outside the main circuit area
-                if t_idx <= min_time:
-                    x = (min_time - 2.0) * xscale  # Further left 
-                else:
-                    x = (max_time + 2.0) * xscale  # Further right
-                
-                # Vertical position based on partition, with good separation
-                base_y = partition * 2  # More space between partitions
-                y = base_y * yscale + dummy_vertical_shift
-                return (x, y)
-                
-            elif len(node) == 3:  # ("dummy", partition, subpartition)
-                _, p, pprime = node
-                # Map partition to subgraph partition if needed
-                if node_map and p in node_map:
-                    mapped_p = node_map[p]
-                    # Place dummy nodes outside the main graph area
-                    x = (depth + 2.0) * xscale  # Further right boundary
-                    
-                    # Distribute dummy nodes vertically with more space
-                    y_offset = mapped_p * 3  # More vertical spacing
-                    y = y_offset * yscale + dummy_vertical_shift
-                    return (x, y)
-                else:
-                    # Default position if partition not mapped
-                    return ((depth + 2.0) * xscale, (num_qubits_phys / 2) * yscale + dummy_vertical_shift)
+
+            x = (max_time + 2.0) * xscale  # Further right
             
-            elif len(node) == 2:  # ("dummy", identifier)
-                # Place temporal dummy nodes on left/right boundaries
-                _, identifier = node
-                if isinstance(identifier, int):
-                    # Temporal dummy - could be before or after the subgraph
-                    if identifier < min_time:
-                        x = (min_time - 2.0) * xscale  # Further left boundary
-                    else:
-                        x = (max_time + 2.0) * xscale   # Further right boundary
-                    
-                    # Center vertically with large shift up
-                    y = (num_qubits_phys / 2) * yscale + dummy_vertical_shift
-                    return (x, y)
-                else:
-                    # Generic dummy node
-                    return ((depth + 2.0) * xscale, (num_qubits_phys / 2) * yscale + dummy_vertical_shift)
+            # Vertical position based on partition, with good separation
+            base_y = node_map[partition]   # More space between partitions
+            y = base_y * yscale + dummy_vertical_shift
+            print(f"Dummy node position: (x={x}, y={y})")
+            return (x, y)
+                
 
         # Handle regular circuit nodes
-        if isinstance(node, tuple) and len(node) == 2:
+        elif isinstance(node, tuple) and len(node) == 2:
             q, t = node
             
             # For positioning, use the subgraph coordinates directly
             # The assignment_map handling should be done in the space mapping, not here
             
             # Ensure we have valid indices
-            print(f"Processing node: {node}")
             if (q,t) in pos_list:
-                print("Pos_list has position for node:", pos_list[(q,t)])
                 x = t * xscale
 
                 y = (num_qubits_phys - pos_list[(q,t)]) * yscale
@@ -1144,9 +1107,12 @@ def hypergraph_to_tikz_subgraph(
         # Check if it's a dummy node - do not show labels for dummy nodes
         is_dummy = isinstance(n, tuple) and len(n) >= 2 and n[0] == "dummy"
         
-        if show_labels and not is_dummy:
-            q, t = n
-            label = f"$({q},{t})$"
+        if show_labels:
+            if is_dummy:
+                label = f"QPU {n[2]}"  # Use partition info for dummy nodes
+            else:
+                q, t = n
+                label = f"$({q},{t})$"
             tikz_code.append(
                 f"    \\node [style={style}, label={{[nodeLabel]above:{label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
             )
@@ -1387,7 +1353,7 @@ def hypergraph_to_tikz_subgraph(
 
     # Add boundary lines between partitions (if applicable)
     tikz_code.append(r"  \begin{pgfonlayer}{edgelayer}")
-    print("QPU sizes:", qpu_sizes)
+
     for i in range(1, len(qpu_sizes)):
         boundary = sum(qpu_sizes[:i])+1
         line_y = (num_qubits_phys - boundary + 0.5) * yscale

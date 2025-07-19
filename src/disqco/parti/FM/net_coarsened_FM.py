@@ -1,7 +1,7 @@
 from disqco.graphs.coarsening.network_coarsener import NetworkCoarsener
 # from disqco.parti.FM.FM_hetero import run_FM_hetero_dummy
 import multiprocessing as mp
-from disqco.parti.FM.FM_methods import set_initial_sub_partitions, order_nodes, map_assignment, calculate_full_cost_hetero
+from disqco.parti.FM.FM_methods import set_initial_sub_partitions, order_nodes, calculate_full_cost_hetero
 from disqco.graphs.GCP_hypergraph import SubGraphManager
 from disqco.parti.FM.multilevel_FM import MLFM_recursive_hetero_mapped
 import numpy as np

@@ -32,40 +32,65 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
         self.qpu_sizes = self.network.qpu_sizes
         group_gates = kwargs.get('group_gates', True)
+        hypergraph = kwargs.get('hypergraph', None)
 
-        self.hypergraph = QuantumCircuitHyperGraph(circuit, group_gates=group_gates)
-        self.num_partitions = len(self.qpu_sizes)
+        if hypergraph is None:
+            self.hypergraph = QuantumCircuitHyperGraph(circuit, group_gates=group_gates)
+        else:
+            self.hypergraph = hypergraph
+            
+        
 
         self.num_qubits = self.hypergraph.num_qubits
         self.depth = self.hypergraph.depth
 
-        self.costs = kwargs.pop('costs', self.network.get_costs())
+        self.costs = kwargs.pop('costs', {})
         self.mapping = None
+        self.dummy_nodes = kwargs.get('dummy_nodes', set())
+        self.node_map = kwargs.get('node_map', {qpu : index for index, qpu in enumerate(self.qpu_sizes)})
+
+        
+
+        for node in self.hypergraph.nodes:
+            if node[0] == 'dummy':
+                qpu_index = node[2]
+                self.dummy_nodes.add(node)
+                if qpu_index not in self.node_map:
+                    self.node_map[qpu_index] = len(self.node_map)
+
+        self.sparse = kwargs.get('sparse', False)
+        self.num_partitions = len(self.qpu_sizes) - len(self.dummy_nodes)
+
 
         if self.initial_assignment is None:
             self.initial_assignment = set_initial_partitions(network, self.num_qubits, self.depth)
 
-        if isinstance(self.qpu_sizes, dict):
-            # If qpu_sizes is a dictionary, we need to convert it to a list of lists
-            self.qpu_sizes = list(self.qpu_sizes.values())
-
     def FM_pass(self, hypergraph, assignment, **kwargs):
-        
-        active_nodes = kwargs.get('active_nodes', hypergraph.nodes)
+
+        active_hypergraph_nodes = kwargs.get('active_hypergraph_nodes', hypergraph.nodes)
         limit = kwargs.get('limit', len(hypergraph.nodes) * 0.125)
         # print("Limit:", limit)
-        spaces = find_spaces(self.num_qubits, self.depth, assignment, self.qpu_sizes)
-        map_counts_and_configs(hypergraph, assignment, self.num_partitions, costs=self.costs, **kwargs)
+        spaces = find_spaces(assignment, self.qpu_sizes, hypergraph)
 
-        lock_dict = {node: False for node in active_nodes}
+        map_counts_and_configs(hypergraph, 
+                               assignment, 
+                               self.num_partitions, 
+                               costs=self.costs, 
+                               node_map=self.node_map, 
+                               dummy_nodes=self.dummy_nodes,
+                               hetero=self.network.hetero)
+
+        lock_dict = {node: False for node in active_hypergraph_nodes}
+        lock_dict.update({node: True for node in self.dummy_nodes})
 
         array = find_all_gains(hypergraph,
-                               active_nodes,
                                assignment,
                                num_partitions=self.num_partitions,
                                costs = self.costs,
-                                network=self.network,
-                               **kwargs
+                               network=self.network,
+                               node_map=self.node_map,
+                               dummy_nodes=self.dummy_nodes,
+                               active_qpu_nodes=self.network.active_nodes,
                                )
         
         buckets = fill_buckets(array, self.max_gain)
@@ -97,6 +122,8 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
                                                                     assignment,
                                                                     self.costs,
                                                                     network=self.network,
+                                                                    node_map=self.node_map,
+                                                                    dummy_nodes=self.dummy_nodes,
                                                                     **kwargs
                                                                     )
             update_spaces(node, source, destination, spaces)
@@ -118,9 +145,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
         mapping = kwargs.pop('mapping', {t : set([t]) for t in range(hypergraph.depth)})
 
-        dummy_nodes = kwargs.get('dummy_nodes', set())
-        node_map = kwargs.get('node_map', None)
-        assignment_map = kwargs.get('assignment_map', None)
+        dummy_nodes = self.dummy_nodes
 
         log = kwargs.get('log', False)
 
@@ -130,10 +155,9 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
                                            self.num_partitions, 
                                            self.costs,
                                            network=self.network,
+                                           node_map=self.node_map,
                                            dummy_nodes=dummy_nodes,
-                                           node_map=node_map,
-                                           assignment_map=assignment_map,
-                                           hetero=self.network.hetero,)
+                                           hetero=self.network.hetero)
         
         if log:
             print("Initial cost:", initial_cost)
@@ -145,6 +169,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
         best_assignments.append(assignment)
         # print("Starting FM passes...")
         self.max_gain = self.find_max_gain(mapping)
+
         for n in range(passes):
             assignment_list, gain_list = self.FM_pass(hypergraph, assignment, **kwargs)
 
@@ -184,6 +209,10 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
     
     def partition(self, **kwargs):
 
+        multilevel = kwargs.get('multilevel', False)
+        if multilevel:
+            return self.multilevel_partition(**kwargs)
+
         kwargs['graph'] = kwargs.get('graph', self.hypergraph)
         kwargs['assignment'] = kwargs.get('assignment', self.initial_assignment)
         kwargs['mapping'] = kwargs.get('mapping', None)
@@ -196,10 +225,14 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
     def multilevel_partition(self, **kwargs):
         kwargs['graph'] = self.hypergraph
         coarsener = kwargs.pop('coarsener', None)
+        sparse = kwargs.get('sparse', False)
 
         if coarsener is None:
             coarsener_class = HypergraphCoarsener()
-            coarsener = coarsener_class.coarsen_recursive_batches_mapped
+            if sparse:
+                coarsener = coarsener_class.coarsen_recursive_subgraph
+            else:
+                coarsener = coarsener_class.coarsen_recursive_batches_mapped
 
         return super().multilevel_partition(coarsener=coarsener, **kwargs)
 

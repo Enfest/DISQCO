@@ -78,48 +78,30 @@ def set_initial_partitions_dict(network : QuantumNetwork, num_qubits : int, dept
     
     return partition_assignment
 
-def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes: dict[int, int], assignment_map = None, graph : QuantumCircuitHyperGraph | None = None) -> dict[int, int]:
-    """
-    Find the number of free qubits in each partition at each time step.
-    num_qubits: number of logical qubits in the circuit
-    assignment: function that maps qubits to partitions
-    network: quantum network object
-    """
-    num_partitions = len(qpu_sizes)
-    spaces = {}
-    if assignment_map is None:
-        for t in range(depth):
-            if isinstance(qpu_sizes, dict):
-                keys = list(sorted(qpu_sizes.keys()))
-                spaces[t] = [qpu_sizes[k] for k in keys]
-            else:
-                spaces[t] = [size for size in qpu_sizes]
+# def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes: dict[int, int], graph : QuantumCircuitHyperGraph | None = None) -> dict[int, int]:
+#     """
+#     Find the number of free qubits in each partition at each time step.
+#     num_qubits: number of logical qubits in the circuit
+#     assignment: function that maps qubits to partitions
+#     network: quantum network object
+#     """
+#     spaces = {}
 
-            for q in range(num_qubits):
-                # spaces[t][assignment[(q,t)]] -= 1
-                spaces[t][assignment[t][q]] -= 1
-    else:
-        for t in range(depth):
-            if isinstance(qpu_sizes, dict):
-                keys = list(sorted(qpu_sizes.keys()))
-                spaces[t] = [qpu_sizes[k] for k in keys]
-            else:
-                spaces[t] = [qpu_sizes[k] for k in range(num_partitions)]
-        if graph is not None:
-            for node in graph.nodes:
-                if node[0] != 'dummy':
-                    q,t = node
-                    sub_node = assignment_map[node]
-                    try:
-                        part = assignment[sub_node[1]][sub_node[0]]
-                        spaces[t][part] -= 1
-                    except Exception as e:
-                        # print(f"Error processing node {node} with sub_node {sub_node}: {e}")
-                        raise e
+#     for t in range(depth):
+#         if isinstance(qpu_sizes, dict):
+#             keys = list(sorted(qpu_sizes.keys()))
+#             spaces[t] = [qpu_sizes[k] for k in keys]
+#         else:
+#             spaces[t] = [size for size in qpu_sizes]
+
+#         for q in range(num_qubits):
+#             # spaces[t][assignment[(q,t)]] -= 1
+#             spaces[t][assignment[t][q]] -= 1
+
     
-    return spaces
+#     return spaces
 
-def find_spaces_sparse(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : QuantumCircuitHyperGraph) -> dict[int, int]:
+def find_spaces(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : QuantumCircuitHyperGraph) -> dict[int, int]:
     """
     Find the number of free qubits in each partition at each time step.
     num_qubits: number of logical qubits in the circuit
@@ -128,10 +110,9 @@ def find_spaces_sparse(assignment : np.ndarray, qpu_sizes: dict[int, int], graph
     """
     depth = graph.depth
     spaces = {}
-    print("QPU sizes:", qpu_sizes)
+
     for t in range(depth):
         spaces[t] = {qpu : value for qpu, value in qpu_sizes.items()}
-        print(f"Initial spaces at time {t}: {spaces[t]}")
     
     if graph is not None:
         for node in graph.nodes:
@@ -139,7 +120,6 @@ def find_spaces_sparse(assignment : np.ndarray, qpu_sizes: dict[int, int], graph
                 continue
             q,t = node
             part = assignment[t][q]
-            print(f"Processing node {node} with partition {part} at time {t}")
             spaces[t][part] -= 1
 
     
@@ -158,17 +138,18 @@ def check_valid(node : tuple[int,int], destination: int, spaces: dict[int, int])
         valid = True
     return valid
 
-def move_node(node: tuple[int,int], destination: int, assignment: dict[tuple[int,int] : int], assignment_map : dict[tuple[int,int] : tuple[int,int]] = None) -> dict[tuple[int,int] : int]:
+def move_node(node: tuple[int,int], 
+              destination: int, 
+              assignment: dict[tuple[int,int] : int], 
+              ) -> dict[tuple[int,int] : int]:
     """ 
     Move a node to a new destination partition by updating the assignment.
     node: tuple of (qubit index, time step)
     destination: destination partition
     assignment: function that maps qubits to partitions
     """
-    if assignment_map is not None:
-        sub_node = assignment_map[node]
-    else:
-        sub_node = node
+
+    sub_node = node
     t = sub_node[1]
     q = sub_node[0]
 
@@ -257,7 +238,6 @@ def find_gain_h(hypergraph,
                 costs = {}, 
                 network : QuantumNetwork = None, 
                 node_map = None, 
-                assignment_map=None, 
                 dummy_nodes = {}):
     
     assignment_new = move_node(node,destination, assignment)
@@ -275,8 +255,7 @@ def find_gain_h(hypergraph,
     return gain
 
 def find_all_gains(graph : QuantumCircuitHyperGraph, 
-                   nodes: list[tuple[int,int]], 
-                   assignment: dict[tuple[int,int] : int], 
+                   assignment: np.ndarray, 
                    num_partitions: int, 
                    costs: dict, 
                    network : QuantumNetwork = None,
@@ -285,69 +264,92 @@ def find_all_gains(graph : QuantumCircuitHyperGraph,
     hetero = network.hetero
     if hetero:
         node_map = kwargs.get('node_map', None)
-        assignment_map = kwargs.get('assignment_map', None)
-        dummy_nodes = kwargs.get('dummy_nodes', {})
-        return find_all_gains_hetero(graph,nodes,assignment,num_partitions,costs,network=network, node_map=node_map, assignment_map=assignment_map, dummy_nodes=dummy_nodes)
+        dummy_nodes = kwargs.get('dummy_nodes', set())
+        active_qpu_nodes = kwargs.get('active_qpu_nodes', set())
+        return find_all_gains_hetero(graph,
+                                     assignment,
+                                     num_partitions,
+                                     network=network,
+                                     active_qpu_nodes=active_qpu_nodes,
+                                     costs=costs,
+                                     node_map=node_map,
+                                     dummy_nodes=dummy_nodes)
     else:
-        return find_all_gains_homo(graph,nodes,assignment,num_partitions,costs)
+        return find_all_gains_homo(graph,
+                                   assignment,
+                                   num_partitions,
+                                   costs)
 
 def find_all_gains_homo(hypergraph,
-                        nodes,
                         assignment,
                         num_partitions,
-                        costs):
+                        costs,
+                        active_qpu_nodes=set(),
+                        dummy_nodes=set()):
     array = {}
-    for node in nodes:
-        for k in range(num_partitions):
-            source = assignment[node[1]][node[0]]
-            if source != k:
-                gain = find_gain(hypergraph,node,k,assignment,num_partitions, costs)
-                array[(node[1],node[0],k)] = gain
+    if not active_qpu_nodes:
+        active_qpu_nodes = set(range(num_partitions))
+    for node in hypergraph.nodes - dummy_nodes:
+        q,t = node
+        source = assignment[t][q]
+        for qpu in active_qpu_nodes - set([source]):
+            gain = find_gain(hypergraph,node,qpu,assignment,num_partitions, costs)
+            array[(t,q,qpu)] = gain
     return array
 
 def find_all_gains_hetero(hypergraph,
-                          nodes,
                           assignment,
                           num_partitions,
+                          network: QuantumNetwork,
+                          active_qpu_nodes=set(),
                           costs={},
-                          network: QuantumNetwork = None,
                           node_map=None,
-                          assignment_map=None,
                           dummy_nodes={}):
     array = {}
-    for node in nodes:
-        if assignment_map is not None:
-            sub_node = assignment_map[node]
-        else:
-            sub_node = node
-        for k in range(num_partitions):
-            source = assignment[sub_node[1]][sub_node[0]]
-            if source != k:
-                gain = find_gain_h(hypergraph,node,k,assignment,num_partitions, costs = costs, network = network, node_map=node_map, assignment_map=assignment_map, dummy_nodes=dummy_nodes)
-                array[(node[1],node[0],k)] = gain
+    if not active_qpu_nodes:
+        active_qpu_nodes = set(range(num_partitions))
+    for node in hypergraph.nodes - dummy_nodes:
+        q,t = node
+        source = assignment[t][q]
+        for k in active_qpu_nodes - set([source]):
+            gain = find_gain_h(hypergraph,
+                                node,
+                                k,
+                                assignment,
+                                num_partitions,
+                                costs = costs,
+                                network = network,
+                                node_map=node_map,
+                                dummy_nodes=dummy_nodes)
+
+            array[(t,q,k)] = gain
     return array
 
 def find_all_gains_hetero_sparse(hypergraph,
-                          nodes,
-                          assignment,
-                          num_partitions,
-                          costs={},
-                          network: QuantumNetwork = None,
-                          active_nodes=None,
-                          node_map=None,
-                          dummy_nodes={}):
+                                assignment,
+                                num_partitions,
+                                costs={},
+                                network: QuantumNetwork = None,
+                                active_qpu_nodes=set(),
+                                node_map=None,
+                                dummy_nodes=set()):
     array = {}
-    if active_nodes is None:
-        active_nodes = set(range(num_partitions))
-    for node in nodes:
-        if node in dummy_nodes:
-            continue
+    if not active_qpu_nodes:
+        active_qpu_nodes = set(range(num_partitions))
+
+    for node in hypergraph.nodes - dummy_nodes:
         q, t = node
         source = assignment[t][q]
-        if source == -1:  # Skip unassigned nodes in sparse assignment
-            continue
-        for k in active_nodes - set([source]):
-            gain = find_gain_h(hypergraph,node,k,assignment,num_partitions, costs = costs, network = network, node_map=node_map, dummy_nodes=dummy_nodes)
+        for k in active_qpu_nodes - set([source]):
+            gain = find_gain_h(hypergraph,
+                               node,
+                               k,
+                               assignment,
+                               num_partitions,
+                               costs=costs,
+                               network=network,
+                               node_map=node_map,
+                               dummy_nodes=dummy_nodes)
             array[(t,q,k)] = gain
     return array
 
@@ -646,13 +648,43 @@ def take_action_and_update(hypergraph,
                            network : QuantumNetwork = None,
                            **kwargs):
     hetero = kwargs.get('hetero', False)
+    sparse = kwargs.get('sparse', False)
     if hetero:
         node_map = kwargs.get('node_map', None)
-        assignment_map = kwargs.get('assignment_map', None)
-        return take_action_and_update_hetero(hypergraph,node,destination,array,buckets,num_partitions,lock_dict,assignment,costs = costs, network = network, node_map=node_map, assignment_map=assignment_map)
+        if sparse:
+            dummy_nodes = kwargs.get('dummy_nodes', set())
+            return take_action_and_update_hetero_sparse(hypergraph,
+                                                        node,
+                                                        destination,
+                                                        array,
+                                                        buckets,
+                                                        lock_dict,
+                                                        assignment,
+                                                        costs=costs,
+                                                        network=network,
+                                                        node_map=node_map)
+        return take_action_and_update_hetero(hypergraph,
+                                             node,
+                                             destination,
+                                             array,
+                                             buckets,
+                                             num_partitions,
+                                             lock_dict,
+                                             assignment,
+                                             costs=costs,
+                                             network=network,
+                                             node_map=node_map)
     else:
-        return take_action_and_update_homo(hypergraph,node,destination,array,buckets,num_partitions,lock_dict,assignment,costs)
-    
+        return take_action_and_update_homo(hypergraph,
+                                           node,
+                                           destination,
+                                           array,
+                                           buckets,
+                                           num_partitions,
+                                           lock_dict,
+                                           assignment,
+                                           costs)
+
 def take_action_and_update_homo(hypergraph,
                                 node,
                                 destination,
@@ -765,39 +797,27 @@ def take_action_and_update_hetero(hypergraph,
                                   num_partitions,
                                   lock_dict,
                                   assignment,
-                                  costs = {},
-                                  network : QuantumNetwork = None,
-                                  node_map = None,
-                                  assignment_map = None):
-    assignment_new = move_node(node,destination,assignment, assignment_map=assignment_map)
-    # print("Destination", destination)
+                                  network: QuantumNetwork,
+                                  costs={},
+                                  node_map=None):
+    assignment_new = move_node(node, destination, assignment)
     delta_gains = {}
     for edge in hypergraph.node2hyperedges[node]:
         
         info = hypergraph.hyperedge_attrs[edge]
         root_set = hypergraph.hyperedges[edge]['root_set']
         rec_set = hypergraph.hyperedges[edge]['receiver_set']
-        # print("Info", info)
-
-        cost = info['cost']
-        # cost_new = hedge_to_cost_hetero(hypergraph,edge,assignment_new,num_partitions,costs,assignment_map=assignment_map)
-        
+        cost = info['cost'] 
         root_counts = info['root_counts']
-        # print("Root counts", root_counts)
         rec_counts = info['rec_counts']
-        # print("Receiver counts", rec_counts)
         if node in root_set:
-            root_counts_new, source = update_counts(root_counts,node,destination,assignment,assignment_map=assignment_map)
-            # print("Root counts new", root_counts_new)
+            root_counts_new, source = update_counts(root_counts,node,destination,assignment)
             root_config_new = update_config(info['root_config'],root_counts_new,source,destination)
-            # print("Root config new", root_config_new)
             rec_counts_new = rec_counts.copy()
             rec_config_new = tuple(copy.deepcopy(list(info['rec_config'])))
         elif node in rec_set:
-            rec_counts_new, source = update_counts(rec_counts,node,destination,assignment,assignment_map=assignment_map)
-            # print("Receiver counts new", rec_counts_new)
+            rec_counts_new, source = update_counts(rec_counts,node,destination,assignment)
             rec_config_new = update_config(info['rec_config'],rec_counts_new,source,destination)
-            # print("Receiver config new", rec_config_new)
             root_counts_new = root_counts.copy()
             root_config_new = tuple(copy.deepcopy(list(info['root_config'])))
         
@@ -825,20 +845,17 @@ def take_action_and_update_hetero(hypergraph,
 
             # source = assignment[next_root_node]
             if not lock_dict[next_root_node]:
-                if assignment_map is not None:
-                    next_root_node_sub = assignment_map[next_root_node]
-                else:
-                    next_root_node_sub = next_root_node
+                next_root_node_sub = next_root_node
                 source = assignment[next_root_node_sub[1]][next_root_node_sub[0]]
                 # print('Not locked')
                 for next_destination in range(num_partitions):
                     if source != next_destination:
                         next_action = (next_root_node[1], next_root_node[0], next_destination)
 
-                        next_root_counts_b, source1 = update_counts(root_counts_pre, next_root_node, next_destination, assignment, assignment_map=assignment_map)
+                        next_root_counts_b, source1 = update_counts(root_counts_pre, next_root_node, next_destination, assignment)
                         next_root_config_b = update_config(root_config, next_root_counts_b, source1, next_destination)
 
-                        next_root_counts_ab, source2 = update_counts(root_counts_a, next_root_node, next_destination, assignment_new, assignment_map=assignment_map)
+                        next_root_counts_ab, source2 = update_counts(root_counts_a, next_root_node, next_destination, assignment_new)
                         next_root_config_ab = update_config(root_config_a, next_root_counts_ab, source2, next_destination)
 
                         if (next_root_config_b, rec_config) not in costs:
@@ -861,27 +878,19 @@ def take_action_and_update_hetero(hypergraph,
                             delta_gains[next_action] = delta_gain
 
         for next_rec_node in rec_set:
-            # print(f'Next receiver node {next_rec_node}')
-
-            # source = assignment[next_rec_node]
             if next_rec_node not in lock_dict:
                 continue
             if not lock_dict[next_rec_node]:
-                if assignment_map is not None:
-                    next_rec_node_sub = assignment_map[next_rec_node]
-                else:
-                    next_rec_node_sub = next_rec_node
+                next_rec_node_sub = next_rec_node
 
                 source = assignment[next_rec_node_sub[1]][next_rec_node_sub[0]]
-                # print('Not locked')
                 for next_destination in range(num_partitions):
                     if source != next_destination:
                         next_action = (next_rec_node[1], next_rec_node[0], next_destination)
-                        
-                        next_rec_counts_b, source1 = update_counts(rec_counts_pre, next_rec_node, next_destination, assignment, assignment_map=assignment_map)
+                        next_rec_counts_b, source1 = update_counts(rec_counts_pre, next_rec_node, next_destination, assignment)
                         next_rec_config_b = update_config(rec_config, next_rec_counts_b, source1, next_destination)
                         
-                        next_rec_counts_ab, source2 = update_counts(rec_counts_a, next_rec_node, next_destination, assignment_new, assignment_map=assignment_map)
+                        next_rec_counts_ab, source2 = update_counts(rec_counts_a, next_rec_node, next_destination, assignment_new)
                         next_rec_config_ab = update_config(rec_config_a, next_rec_counts_ab, source2, next_destination)
 
                         if (root_config, next_rec_config_b) not in costs:
@@ -911,13 +920,9 @@ def take_action_and_update_hetero(hypergraph,
             
 
     for action in delta_gains:
-        # print(f'Action {action} Gain change {delta_gains[action]}')
         i = delta_gains[action]
         old_gain = array[action]
-        # print(f'Old gain {old_gain}')
-        # print(f'New gain {old_gain - i}')
         if action in buckets[old_gain]:
-            # print(f'Old gain in bucket - remove and add to {old_gain - i}')
             buckets[old_gain].remove(action)
             buckets[old_gain - i].add(action)
             
@@ -979,21 +984,7 @@ def sort_node_list(node_list : list[int]):
 
     return sorted_node_list
 
-def map_assignment(node_list : list[int]):
-    assignment_map = {}
-    sorted_node_list = sort_node_list(node_list)
-    for t in range(len(sorted_node_list)):
-        for q in range(len(sorted_node_list[t])):
-            assignment_map[(sorted_node_list[t][q], t)] = (q, t)
-            # print(f'Qubit {sorted_node_list[t][q]} at layer {t} assigned to position {q} in layer {t}')
-
-    # for t in range(len(sorted_node_list)):
-    #     for q in range(len(sorted_node_list[t])):
-    #         assignment_map[(sorted_node_list[t][q], t) ] = (q,t)
-
-    return assignment_map, sorted_node_list
-
-def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[list[int]], active_nodes, assignment_map) -> np.ndarray:
+def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[list[int]], active_nodes) -> np.ndarray:
     """
     Set the initial partitions for the sub-network.
     """
@@ -1021,13 +1012,6 @@ def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[li
     
     return assignment
 
-def process_sub_partitions(sub_partitions, graph, assignment_map):
-    for t in range(graph.depth):
-        for q in range(graph.num_qubits):
-            if (q, t) not in assignment_map:
-                continue
-            sub_node = assignment_map[(q, t)]
-            sub_partitions[t][q] = sub_partitions[sub_node[1]][sub_node[0]]
 
 def refine_assignment(level, num_levels, assignment, mapping_list):
     new_assignment = assignment
@@ -1043,7 +1027,6 @@ def take_action_and_update_hetero_sparse(hypergraph,
                                   destination,
                                   array,
                                   buckets,
-                                  num_partitions,
                                   lock_dict,
                                   assignment,
                                   costs = {},
@@ -1057,31 +1040,22 @@ def take_action_and_update_hetero_sparse(hypergraph,
         info = hypergraph.hyperedge_attrs[edge]
         root_set = hypergraph.hyperedges[edge]['root_set']
         rec_set = hypergraph.hyperedges[edge]['receiver_set']
-        # print("Info", info)
-
         cost = info['cost']
-        # cost_new = hedge_to_cost_hetero(hypergraph,edge,assignment_new,num_partitions,costs,assignment_map=assignment_map)
-        
+
         root_counts = info['root_counts']
-        # print("Root counts", root_counts)
         rec_counts = info['rec_counts']
-        # print("Receiver counts", rec_counts)
         destination_mapped = destination
         if node_map is not None:
             destination_mapped = node_map[destination]
         if node in root_set:
             
             root_counts_new, source_mapped = update_counts(root_counts,node,destination_mapped,assignment,node_map=node_map)
-            # print("Root counts new", root_counts_new)
             root_config_new = update_config(info['root_config'],root_counts_new,source_mapped,destination_mapped)
-            # print("Root config new", root_config_new)
             rec_counts_new = rec_counts.copy()
             rec_config_new = tuple(copy.deepcopy(list(info['rec_config'])))
         elif node in rec_set:
             rec_counts_new, source_mapped = update_counts(rec_counts,node,destination_mapped,assignment,node_map=node_map)
-            # print("Receiver counts new", rec_counts_new)
             rec_config_new = update_config(info['rec_config'],rec_counts_new,source_mapped,destination_mapped)
-            # print("Receiver config new", rec_config_new)
             root_counts_new = root_counts.copy()
             root_config_new = tuple(copy.deepcopy(list(info['root_config'])))
         
@@ -1103,13 +1077,11 @@ def take_action_and_update_hetero_sparse(hypergraph,
         rec_config_a = rec_config_new
         destination_set = network.active_nodes
         for next_root_node in root_set:
-            # print(f'Next root node {next_root_node}')
             if next_root_node not in lock_dict:
                 continue
             if lock_dict[next_root_node]:
                 continue
             source = assignment[next_root_node[1]][next_root_node[0]]
-            # print('Not locked')
             
             for next_destination in destination_set - {source}:
                 if node_map is not None:
@@ -1162,7 +1134,6 @@ def take_action_and_update_hetero_sparse(hypergraph,
                 continue
             next_rec_node_sub = next_rec_node
             source = assignment[next_rec_node_sub[1]][next_rec_node_sub[0]]
-            # print('Not locked')
             for next_destination in destination_set - {source}:
 
                 if node_map is not None:

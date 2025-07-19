@@ -1,16 +1,14 @@
-# from disqco.parti.FM.FM_hetero import run_FM_hetero_dummy
-from disqco.parti.FM.FM_methods import set_initial_sub_partitions, order_nodes, map_assignment
 from disqco.graphs.GCP_hypergraph import SubGraphManager
 from disqco.parti.FM.multilevel_FM import MLFM_recursive_hetero_mapped
-from disqco.parti.FM.FM_methods import calculate_full_cost_hetero,get_all_configs, get_all_costs_hetero
 import numpy as np
-import matplotlib.pyplot as plt
-from disqco.drawing.tikz_drawing import draw_graph_tikz
 import time
 
 
     
-def partition_and_build_subgraphs(subgraph, assignment, qpu_sizes, num_partitions, limit, max_gain, passes_per_level, stochastic, active_nodes, log, add_initial, costs, network, node_map, assignment_map, dummy_nodes, node_list, level, network_level_list, sub_graph_manager,subgraph_list,sub_assignments,index,level_limit=None):
+def partition_and_build_subgraphs(subgraph, 
+                                  assignment, 
+                                  qpu_sizes,
+                                num_partitions, limit, max_gain, passes_per_level, stochastic, active_nodes, log, add_initial, costs, network, node_map, assignment_map, dummy_nodes, node_list, level, network_level_list, sub_graph_manager,subgraph_list,sub_assignments,index,level_limit=None):
 
 
     # if costs is None and len(node_map) <= 12:

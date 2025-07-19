@@ -428,17 +428,20 @@ class SubGraphManager:
 
         # print(f"Old active nodes: {old_active_nodes}")
 
+        # print('Old active nodes:', old_active_nodes)
+
         for p in old_active_nodes:
             
             sg = graph.copy()
             # print(f"Processing subgraph for partition {idx1}")
             new_network = new_networks[p]
-            print(f"Processing partition {p} with network {new_network}")
+            # print(f"Processing partition {p} with network {new_network}")
             new_network_graph = new_network.qpu_graph
             active_nodes = new_network.active_nodes
-            # print(f"Active nodes for network {idx1}: {active_nodes}")
+            
+            # print(f"Active nodes for network: {active_nodes}")
 
-            dummy_counter = 0
+            # dummy_counter = 0
             counter = 0
             # p_s = active_nodes.intersection(current_network.qpu_graph.nodes())
             # for p in p_s:
@@ -449,8 +452,8 @@ class SubGraphManager:
 
             # Create a unique dummy node
             for p_prime in dummy_partitions:
-                dummy_node = ('dummy', p, p_prime, dummy_counter)
-                dummy_counter += 1
+                dummy_node = ('dummy', p, p_prime)
+                # dummy_counter += 1
                 counter+= 1
                 # If your add_node expects (qubit, time), you might do a direct insertion:
                 # print("Creating dummy node for partition", p_prime, ":", dummy_node)
@@ -464,11 +467,11 @@ class SubGraphManager:
 
             # Now find old dummy nodes that are not in the new network graph and find their new dummy node
             for dummy_node in old_dummy_nodes:
-                print(f"Checking old dummy node: {dummy_node}")
+                # print(f"Checking old dummy node: {dummy_node}")
                 dummy_node_id = dummy_node[2]
-                print(f"Dummy node ID: {dummy_node_id}")
+                # print(f"Dummy node ID: {dummy_node_id}")
                 if dummy_node_id not in new_network_graph.nodes:
-                    print(f"Old dummy node {dummy_node} not in new network graph.") 
+                    # print(f"Old dummy node {dummy_node} not in new network graph.") 
                     # Find the corresponding dummy node in the new network graph
                     for qpu in new_network.mapping:
                         # Check if dummy node is contained inside another qpu via the mapping
@@ -477,7 +480,7 @@ class SubGraphManager:
                             dummy_map[dummy_node_id] = dummy_map[qpu]
                             break
             
-            print(f"Dummy map for partition {p}: {dummy_map}")
+            # print(f"Dummy map for partition {p}: {dummy_map}")
 
             all_nodes = list(sg.nodes)
             for node in all_nodes:
@@ -487,7 +490,7 @@ class SubGraphManager:
                     continue
 
                 # node is typically (qubit, time)
-                if isinstance(node, tuple) and len(node) == 4 and node[0] == "dummy":
+                if isinstance(node, tuple) and len(node) > 2 and node[0] == "dummy":
                     node_partition = node[2]
 
                     if node_partition in dummy_map:
@@ -498,6 +501,8 @@ class SubGraphManager:
                         for qpu in new_network.mapping:
                             if node_partition in new_network.mapping[qpu]:
                                 dummy_map[node_partition] = dummy_map[qpu] 
+                    
+                    # print(f"Dummy node {node} belongs to partition {node_partition}")
                 else:
                     q, t = node
                     node_partition = assignment[t][q]
@@ -506,11 +511,17 @@ class SubGraphManager:
                 # print(f"Node {node} belongs to partition {node_partition}")
                 if node_partition != p:
 
+
                     # This node doesn't belong to subgraph p => merge with dummy for node_partition
                     dummy_node = dummy_map[node_partition]
+                    # if node[0] == "dummy":
+                    #     print(f"Dummy node from previous round: {node}")
+                    #     print(f"Merge dummy node {node} into dummy node {dummy_node}")
 
                     # For each hyperedge containing this node, replace it with the dummy node
+                    
                     if node in sg.node2hyperedges:
+
                         edges_for_node = list(sg.node2hyperedges[node])
                         for edge_id in edges_for_node:
                             if edge_id not in sg.hyperedges:
@@ -524,6 +535,7 @@ class SubGraphManager:
                                 root_set.remove(node)
                                 root_set.add(dummy_node)
                                 changed = True
+
                             if node in rec_set:
                                 rec_set.remove(node)
                                 rec_set.add(dummy_node)
@@ -533,12 +545,22 @@ class SubGraphManager:
                                 sg.node2hyperedges[node].discard(edge_id)
                                 sg.node2hyperedges[dummy_node].add(edge_id)
                                 sg.adjacency[node].discard(dummy_node)
-                                sg.adjacency[dummy_node].add(node)
+                                # sg.adjacency[dummy_node].add(node)
                                 
                                 # Now need to replace all occurrences of `node` in the adjacency list with `dummy_node`
                                 for nbr in sg.adjacency[node]:
                                     sg.adjacency[nbr].discard(node)
                                     sg.adjacency[nbr].add(dummy_node)
+
+                                    sg.adjacency[dummy_node].add(nbr)
+                                    sg.adjacency[dummy_node].discard(node)
+
+                                    # if node[0] == "dummy":
+                                    #     print(f"Replacing neighbor {nbr} of dummy node {node} with {dummy_node}")
+
+                                    
+
+
                                     
                                 
 

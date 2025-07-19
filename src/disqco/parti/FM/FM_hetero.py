@@ -19,7 +19,7 @@ def FM_pass_hetero(hypergraph,
         num_qubits = hypergraph.num_qubits
         depth = hypergraph.depth
 
-        spaces = find_spaces(num_qubits, depth, assignment,qpu_info)
+        spaces = find_spaces(assignment, qpu_info, graph=hypergraph)
         hypergraph = map_counts_and_configs_hetero(hypergraph, assignment, num_partitions, network, costs, assignment_map=assignment_map, node_map=node_map, dummy_nodes=dummy_nodes)
 
         lock_dict = {node: False for node in active_nodes}
@@ -180,8 +180,7 @@ def FM_pass_sparse(hypergraph,
                    num_partitions,
                    qpu_info, 
                    costs, 
-                   limit, 
-                   active_nodes,
+                   limit,
                    network=None,
                    node_map=None,
                    dummy_nodes=set()):
@@ -204,18 +203,22 @@ def FM_pass_sparse(hypergraph,
     Returns:
         tuple: (assignment_list, gain_list)
     """
-    from disqco.parti.FM.FM_methods import find_spaces_sparse, find_all_gains_hetero_sparse, fill_buckets, find_action, update_spaces, lock_node, take_action_and_update_hetero_sparse
+    from disqco.parti.FM.FM_methods import find_all_gains_hetero_sparse, fill_buckets, find_action, update_spaces, lock_node, take_action_and_update_hetero_sparse
     from disqco.graphs.hypergraph_methods import map_counts_and_configs_hetero
     
     # Calculate available spaces using sparse method
-    spaces = find_spaces_sparse(assignment=assignment, 
+    spaces = find_spaces(assignment=assignment, 
                                 qpu_sizes=qpu_info, 
                                 graph=hypergraph)
     
     # Map counts and configs to hypergraph using sparse method with node_map
-    hypergraph = map_counts_and_configs_hetero(hypergraph, assignment, num_partitions, 
-                                              network, costs,
-                                              node_map=node_map, dummy_nodes=dummy_nodes)
+    map_counts_and_configs_hetero(hypergraph,
+                                    assignment,
+                                    num_partitions,
+                                    network,
+                                    costs,
+                                    node_map=node_map,
+                                    dummy_nodes=dummy_nodes)
 
     # Initialize lock dictionary for all active nodes
     lock_dict = {node: False for node in hypergraph.nodes}
@@ -223,10 +226,15 @@ def FM_pass_sparse(hypergraph,
     lock_dict.update({node: True for node in dummy_nodes})
 
     # Calculate gains for all possible moves
-    array = find_all_gains_hetero_sparse(hypergraph, hypergraph.nodes, assignment, 
-                                  num_partitions, costs, network=network, active_nodes=network.active_nodes,
-                                  node_map=node_map, dummy_nodes=dummy_nodes)
-    
+    array = find_all_gains_hetero_sparse(hypergraph, 
+                                         assignment, 
+                                        num_partitions, 
+                                        costs, 
+                                        network=network, 
+                                        active_qpu_nodes=network.active_nodes,
+                                        node_map=node_map, 
+                                        dummy_nodes=dummy_nodes)
+
     # Fill buckets based on gains
     buckets = fill_buckets(array, max_gain)
     
@@ -252,7 +260,7 @@ def FM_pass_sparse(hypergraph,
         
         # Apply the move
         assignment_new, array, buckets = take_action_and_update_hetero_sparse(
-            hypergraph, node, destination, array, buckets, num_partitions,
+            hypergraph, node, destination, array, buckets,
             lock_dict, assignment, costs, network=network, 
             node_map=node_map
         )
@@ -324,9 +332,13 @@ def run_FM_sparse(hypergraph,
         limit = len(active_nodes) * 0.125
 
     initial_assignment = np.array(initial_assignment)
-    initial_cost = calculate_full_cost_hetero(hypergraph, initial_assignment, num_partitions, 
-                                            costs, network=network, node_map=node_map, 
-                                            assignment_map=None, dummy_nodes=dummy_nodes)
+    initial_cost = calculate_full_cost_hetero(hypergraph, 
+                                              initial_assignment, 
+                                              num_partitions, 
+                                              costs,   
+                                              network=network, 
+                                              node_map=node_map, 
+                                              dummy_nodes=dummy_nodes)
     
     if log:
         print("Initial cost:", initial_cost)
@@ -351,7 +363,7 @@ def run_FM_sparse(hypergraph,
         assignment_list, gain_list = FM_pass_sparse(
             hypergraph, max_gain, initial_assignment,
             num_partitions, qpu_info, costs, limit, 
-            active_nodes, network=network, node_map=node_map,
+            network=network, node_map=node_map,
             dummy_nodes=dummy_nodes
         )
 

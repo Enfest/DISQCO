@@ -28,7 +28,6 @@ class FiducciaMattheysesExt(QuantumCircuitPartitioner):
             network.qpu_sizes, dict) else list(network.qpu_sizes.values())
 
         # Build *extended* hypergraph
-        group_gates = kwargs.get("group_gates", True)
         self.hypergraph: HyperGraph = HyperGraph()
         self.hypergraph.from_circuit(circuit)
 

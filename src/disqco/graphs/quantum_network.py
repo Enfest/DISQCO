@@ -83,7 +83,6 @@ class QuantumNetwork():
         return chosen_edges
 
     def steiner_forest(self, root_config, rec_config, node_map = None):
-
         if node_map is not None:
             inverse_node_map = {v: k for k, v in node_map.items()}
             root_nodes = [inverse_node_map[i] for i in range(len(root_config)) if root_config[i] == 1]
