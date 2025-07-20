@@ -218,6 +218,9 @@ class HypergraphCoarsener:
             H_new.adjacency[nbr].add(target_node)
             H_new.adjacency[target_node].add(nbr)
 
+        # if target_node in H_new.adjacency[target_node]:
+        #     H_new.adjacency[target_node].discard(target_node)
+
         if source_node in H_new.adjacency:
             del H_new.adjacency[source_node]
 
@@ -1258,8 +1261,8 @@ class HypergraphCoarsener:
                                 if neighbor in dummy_nodes:
                                     merge_target = neighbor
                                     break
-                        # if not merge_target:
-                        #     continue  # Skip if no merge target
+                        if not merge_target:
+                            continue  # Skip if no merge target
                     
                     # Check edges involving old_node (same logic as merge_nodes_by_key)
                     if old_node in hypergraph.node2hyperedges:
@@ -1341,3 +1344,4 @@ class HypergraphCoarsener:
         new_H.node_attrs = new_node_attrs
 
         return new_H
+                                  
