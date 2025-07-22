@@ -249,3 +249,21 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
         diameter = nx.diameter(self.network.qpu_graph)
         return base * diameter
 
+    def net_coarsened_partition(self, **kwargs):
+        """
+        Partition the network using the coarsened hypergraph.
+        """
+        kwargs['graph'] = self.hypergraph
+        kwargs['assignment'] = self.initial_assignment
+        kwargs['mapping'] = kwargs.get('mapping', None)
+        kwargs['log'] = kwargs.get('log', False)
+        kwargs['partitioner'] = self.run_FM
+        kwargs['hetero'] = self.network.hetero
+
+        build_next_level = kwargs.get('build_next_level', True)
+        network_level_list = kwargs.get('network_level_list', self.network.network_level_list)
+        level_idx = kwargs.get('level_idx', 0)
+
+        return super().net_coarsened_partition(build_next_level=build_next_level,
+                                                network_level_list=network_level_list,
+                                                level_idx=level_idx, **kwargs)

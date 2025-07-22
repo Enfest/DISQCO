@@ -322,12 +322,10 @@ class NetworkCoarsener:
         # active_nodes = set([sub_node for sub_node in network_coarse.qpu_graph.nodes if sub_node in mapping])
         for source_node, network_coarse in networks_previous_level.items():
             active_nodes = network_coarse.active_nodes
-            print(f"Active nodes at level {level}: {active_nodes}")
             # Initialise list to store child networks
             for node in active_nodes:
                 new_graph = network_coarse.qpu_graph.copy()
                 mapping = network_coarse.mapping
-                print(f"Cutting network at level {level} for node {node}")
                 new_graph, qpu_sizes, new_mapping, new_active_nodes = self.unmerge_nodes(new_graph, node, mapping, level=level, active_nodes=active_nodes)
                 connectivity = []
 
