@@ -33,7 +33,11 @@ class QuantumCircuitPartitioner:
         """
 
         partitioner = kwargs.get('partitioner')
-        results = partitioner(**kwargs)
+        coarsener = kwargs.pop('coarsener', None)
+        if coarsener is not None:
+            results = self.multilevel_partition(coarsener, **kwargs)
+        else:
+            results = partitioner(**kwargs)
 
         return results
     
@@ -115,8 +119,6 @@ class QuantumCircuitPartitioner:
         results = {'best_cost' : final_cost, 'best_assignment' : final_assignment}
 
         return results
-
-    
 
     def refine_assignment(self, level, num_levels, assignment, mapping_list, sparse=False, full_subgraph=None, next_graph=None, qpu_sizes=None):
         new_assignment = assignment

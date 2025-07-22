@@ -1,25 +1,27 @@
+from qiskit import QuantumCircuit
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 from disqco.parti.FM.FM_hetero import run_FM_sparse
 from disqco.parti.FM.partition_and_build_subgraph import partition_and_build_subgraph
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
+from disqco.graphs.quantum_network import QuantumNetwork
 from disqco.parti.FM.FM_methods import calculate_full_cost_hetero
 import numpy as np
 
 def run_full_net_coarsened_FM(
-    circuit,
-    num_qubits,
-    network,
-    coarsening_factor=2,
-    passes_per_level=10,
-    use_multiprocessing=False,
-    num_processes=None,
-    group_gates=True,
-    ML_internal_level_limit=6
+    circuit : QuantumCircuit,
+    num_qubits : int,
+    network : QuantumNetwork,
+    coarsening_factor : int = 2,
+    passes_per_level : int = 10,
+    use_multiprocessing : bool = False,
+    hypergraph_coarsener : callable = HypergraphCoarsener().coarsen_recursive_subgraph_batch,
+    num_processes : int | None = None,
+    group_gates : bool = True,
+    ML_internal_level_limit : int = 6
 ):
     """
     Outer wrapper to build the initial hypergraph, network, coarsened network, and run multilevel partitioning.
     """
-    from disqco.graphs.quantum_network import QuantumNetwork, linear_coupling
     from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph, SubGraphManager
     from disqco.graphs.coarsening.network_coarsener import NetworkCoarsener
     
@@ -58,10 +60,9 @@ def run_full_net_coarsened_FM(
                                         network=coarsest_network,
                                         initial_assignment=initial_assignment_coarse,
                                         sparse=True )
-    coarsener = HypergraphCoarsener()
-    results = FM_partitioner.multilevel_partition(coarsener=coarsener.coarsen_recursive_subgraph_batch, sparse=True, level_limit=ML_internal_level_limit)
+
+    results = FM_partitioner.partition(coarsener=hypergraph_coarsener, sparse=True, level_limit=ML_internal_level_limit)
     optimized_assignment_coarse = results['best_assignment']
-    best_cost = results['best_cost']
     
     # Build initial subgraphs for first level
     sub_graph_manager = SubGraphManager(hypergraph)

@@ -209,10 +209,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
     
     def partition(self, **kwargs):
 
-        multilevel = kwargs.get('multilevel', False)
-        if multilevel:
-            return self.multilevel_partition(**kwargs)
-
+    
         kwargs['graph'] = kwargs.get('graph', self.hypergraph)
         kwargs['assignment'] = kwargs.get('assignment', self.initial_assignment)
         kwargs['mapping'] = kwargs.get('mapping', None)
@@ -222,7 +219,8 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
     
         return super().partition(**kwargs)
 
-    def multilevel_partition(self, **kwargs):
+    def multilevel_partition(self, coarsener=None, **kwargs):
+
         kwargs['graph'] = self.hypergraph
         coarsener = kwargs.pop('coarsener', None)
         sparse = kwargs.get('sparse', False)
@@ -230,7 +228,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
         if coarsener is None:
             coarsener_class = HypergraphCoarsener()
             if sparse:
-                coarsener = coarsener_class.coarsen_recursive_subgraph
+                coarsener = coarsener_class.coarsen_recursive_subgraph_batch
             else:
                 coarsener = coarsener_class.coarsen_recursive_batches_mapped
 
