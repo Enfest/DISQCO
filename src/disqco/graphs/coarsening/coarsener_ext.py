@@ -85,7 +85,7 @@ class HypergraphCoarsener:
         del mapping[source]
         return mapping
 
-    def coarsen_recursive_mapped(self, hypergraph, node_list):
+    def coarsen_recursive_mapped(self, hypergraph, node_list=None):
         """
         Repeatedly coarsen the hypergraph by contracting layer i into i-1
         in a pairwise fashion, preserving all gate nodes:
@@ -101,7 +101,8 @@ class HypergraphCoarsener:
         H_current = hypergraph.copy()
         H_init = hypergraph.copy()
         depth = hypergraph.depth
-    
+        if node_list is None:
+            node_list = [[i for i in range(H_current.num_qubits)] for _ in range(depth)]
         mapping = {i: set([i]) for i in range(depth)}
 
         H_list = [H_init]

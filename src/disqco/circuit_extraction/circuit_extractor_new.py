@@ -247,26 +247,20 @@ class TeleportationManager:
             if p1 != p2:
                 graph.add_edge(p1, p2, key=q)
 
-        print(f"Number of teleportations: {len(graph.edges())}")
         teleportation_order = []
 
         space_counts = self.space_count()
-        print(f"Space counts: {space_counts}")
         while True:
             qubit, source, destination = self.choose_qubit(graph, space_counts)
-            print(f"Chosen qubit: {qubit}, source: {source}, destination: {destination}")
             if qubit is None:
                 break
             teleportation_order.append({'qubit': qubit, 'source': source, 'destination': destination})
-        print("Remaining teleportations", len(graph.edges()))
         if len(graph.edges()) == 0:
             return teleportation_order
         else:
             cycles = nx.simple_cycles(graph)
-            print(f"Cycles: {cycles}")
             # There are cycles to be handled.
             for cycle in cycles:
-                print(f"Cycle: {cycle}")
                 try:
                     edges = nx.find_cycle(graph, cycle)
                 except nx.NetworkXNoCycle:
@@ -276,12 +270,10 @@ class TeleportationManager:
                     graph.remove_edge(source, destination, key=qubit)
                     # space_counts[source] += 1
                     # space_counts[destination] -= 1
-            print(f"Remaining edges after cycles: {len(graph.edges())}")
             return teleportation_order
 
     def swap_qubits_to_phsyical(self, qubit_idx : int, partition : int, data_loc : Qubit) -> bool:
         try:
-            print(f"Swapping qubit {qubit_idx} to physical partition {partition}")
             data_q = self.qubit_manager.allocate_data_qubit(partition)
             self.transfer_state(data_loc, data_q)
             self.qubit_manager.assign_to_physical(partition, data_q, qubit_idx)
@@ -524,34 +516,6 @@ class PartitionedCircuitExtractor:
             self.qc.cz(qubit0, qubit1)
         elif name == 'cp':
             self.qc.cp(params[0], qubit0, qubit1)
-    
-    # def find_common_part(self, q0: int, q1: int) -> tuple[Qubit | None, Qubit | None]:
-
-    #     group0_links = self.qubit_manager.groups[q0]['linked_qubits']
-    #     group1_links = self.qubit_manager.groups[q1]['linked_qubits']
-
-    #     part_set0 = set()
-    #     for part in group0_links:
-    #         part_set0.add(int(part))
-    #     part_set1 = set()
-    #     for part in group1_links:
-    #         part_set1.add(int(part))
-
-    #     p0 = self.current_assignment[q0]
-    #     p1 = self.current_assignment[q1]
-
-    #     q0_phys = self.qubit_manager.log_to_phys_idx[q0]
-
-    #     if p0 in part_set1:
-    #         return q0_phys, self.qubit_manager.linked_comm_qubits[q1][p0]
-    #     if p1 in part_set0:
-    #         return self.qubit_manager.linked_comm_qubits[q0][p1], q1
-    #     for p0 in part_set0:
-    #         for p1 in part_set1:
-    #             if int(p0) == int(p1):
-    #                 return self.qubit_manager.linked_comm_qubits[q0][p0], self.qubit_manager.linked_comm_qubits[q1][p0]
-        
-    #     return None, None
 
     def apply_non_local_two_qubit_gate(self, gate: dict, p_root: int, p1: int) -> None:
         root_q, q1 = gate['qargs']
@@ -726,19 +690,6 @@ class PartitionedCircuitExtractor:
                 else:
                     self.layer_dict[time_step].append(sub_gate)
 
-
-    # def manage_qubit_queue(self) -> None:
-    #     for qubit in list(self.qubit_manager.queue.keys()):
-    #         comm_qubit, partition = self.qubit_manager.queue[qubit]
-    #         if not self.qubit_manager.free_data[partition]:
-    #             continue
-    #         data_qubit = self.qubit_manager.free_data[partition].pop(0)
-    #         self.qc.swap(comm_qubit, data_qubit)
-    #         self.qc.reset(comm_qubit)
-    #         self.qubit_manager.assign_to_physical(partition, data_qubit, qubit)
-    #         self.comm_manager.release_comm_qubit(partition, comm_qubit)
-    #         del self.qubit_manager.queue[qubit]
-
     def extract_partitioned_circuit(self) -> QuantumCircuit:
         for i, layer in sorted(self.layer_dict.items()):
             print(f"Processing layer {i}")
@@ -757,10 +708,6 @@ class PartitionedCircuitExtractor:
             self.current_assignment = new_assignment_layer
             self.partition_assignment[i] = new_assignment_layer
 
-            # # Manage any queue
-            # self.manage_qubit_queue()
-
-            # Now apply gates in the layer
             for gate in layer:
                 gtype = gate['type']
 
@@ -787,9 +734,7 @@ class PartitionedCircuitExtractor:
 
                     self.apply_non_local_two_qubit_gate(gate, p_root, p_rec)
 
-                    
 
-        # Finally, measure all qubits
         for i in range(self.num_qubits):
             self.qc.measure(self.qubit_manager.log_to_phys_idx[i], self.result_reg[i])
 

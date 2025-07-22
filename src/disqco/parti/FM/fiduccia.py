@@ -66,7 +66,6 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
 
         if self.initial_assignment is None:
-            print("Setting initial partitions")
             self.initial_assignment = set_initial_partitions(network, self.num_qubits, self.depth)
 
     def FM_pass(self, hypergraph, assignment, **kwargs):
@@ -151,27 +150,27 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
         dummy_nodes = self.dummy_nodes
 
-        if self.sparse:
-            # Run sparse FM
-            print("Running sparse FM")
-            final_cost, final_assignment, _ = run_FM_sparse(
-                hypergraph=hypergraph,
-                initial_assignment=assignment,
-                qpu_info=self.qpu_sizes,
-                num_partitions=self.num_partitions,
-                active_nodes=self.network.active_nodes,
-                limit=hypergraph.num_qubits_init,
-                max_gain=4*hypergraph.depth,
-                passes=10,
-                stochastic=True,
-                log=False,
-                network=self.network,
-                node_map=self.node_map,
-                dummy_nodes=dummy_nodes
-            )
+        # if self.sparse:
+        #     # Run sparse FM
+        #     # print("Running sparse FM")
+        #     final_cost, final_assignment, _ = run_FM_sparse(
+        #         hypergraph=hypergraph,
+        #         initial_assignment=assignment,
+        #         qpu_info=self.qpu_sizes,
+        #         num_partitions=self.num_partitions,
+        #         active_nodes=self.network.active_nodes,
+        #         limit=hypergraph.num_qubits_init,
+        #         max_gain=4*hypergraph.depth,
+        #         passes=10,
+        #         stochastic=True,
+        #         log=False,
+        #         network=self.network,
+        #         node_map=self.node_map,
+        #         dummy_nodes=dummy_nodes
+        #     )
 
-            results = {'best_cost': final_cost, 'best_assignment': final_assignment}
-            return results
+            # results = {'best_cost': final_cost, 'best_assignment': final_assignment}
+            # return results
         log = kwargs.get('log', False)
 
 
@@ -271,21 +270,21 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
         diameter = nx.diameter(self.network.qpu_graph)
         return base * diameter
 
-    def net_coarsened_partition(self, **kwargs):
-        """
-        Partition the network using the coarsened hypergraph.
-        """
-        kwargs['graph'] = self.hypergraph
-        kwargs['assignment'] = self.initial_assignment
-        kwargs['mapping'] = kwargs.get('mapping', None)
-        kwargs['log'] = kwargs.get('log', False)
-        kwargs['partitioner'] = self.run_FM
-        kwargs['hetero'] = self.network.hetero
+    # def net_coarsened_partition(self, **kwargs):
+    #     """
+    #     Partition the network using the coarsened hypergraph.
+    #     """
+    #     kwargs['graph'] = self.hypergraph
+    #     kwargs['assignment'] = self.initial_assignment
+    #     kwargs['mapping'] = kwargs.get('mapping', None)
+    #     kwargs['log'] = kwargs.get('log', False)
+    #     kwargs['partitioner'] = self.run_FM
+    #     kwargs['hetero'] = self.network.hetero
 
-        build_next_level = kwargs.get('build_next_level', True)
-        network_level_list = kwargs.get('network_level_list', self.network.network_level_list)
-        level_idx = kwargs.get('level_idx', 0)
+    #     build_next_level = kwargs.get('build_next_level', True)
+    #     network_level_list = kwargs.get('network_level_list', self.network.network_level_list)
+    #     level_idx = kwargs.get('level_idx', 0)
 
-        return super().net_coarsened_partition(build_next_level=build_next_level,
-                                                network_level_list=network_level_list,
-                                                level_idx=level_idx, **kwargs)
+    #     return super().net_coarsened_partition(build_next_level=build_next_level,
+    #                                             network_level_list=network_level_list,
+    #                                             level_idx=level_idx, **kwargs)

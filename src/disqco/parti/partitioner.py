@@ -70,7 +70,8 @@ class QuantumCircuitPartitioner:
         mapping_list = mapping_list[::-1]
         graph_list = graph_list[:level_limit]
         mapping_list = mapping_list[:level_limit]
-        pass_list = [10] * level_limit
+        passes_per_level = kwargs.get('passes_per_level', 10)
+        pass_list = [passes_per_level] * level_limit
 
         
 
@@ -93,10 +94,6 @@ class QuantumCircuitPartitioner:
             # # Keep track of the result
             best_cost = best_cost_level
             assignment = best_assignment_level
-
-            # if log:
-            print(f'Best cost at level {i}: {best_cost}')
-
             refined_assignment = self.refine_assignment(i, 
                                                         len(graph_list), 
                                                         assignment, 
@@ -105,6 +102,7 @@ class QuantumCircuitPartitioner:
                                                         full_subgraph=full_graph, 
                                                         next_graph=graph_list[i+1] if i+1 < len(graph_list) else None, 
                                                         qpu_sizes=self.qpu_sizes)
+            
             assignment = refined_assignment
             kwargs['seed_partitions'] = [assignment]
 
@@ -119,6 +117,27 @@ class QuantumCircuitPartitioner:
 
         return results
 
+    def net_coarsened_partition(self, **kwargs):
+        """
+        Perform network coarsened partitioning of the quantum circuit.
+
+        Args:
+            kwargs: Additional arguments for the partitioning process.
+
+        Returns:
+            A list of partitions.
+        """
+        from disqco.parti.FM.net_coarsened_partitioning import run_full_net_coarsened_FM
+
+        results = run_full_net_coarsened_FM(
+            hypergraph=self.hypergraph,
+            network=self.network,
+            num_qubits=self.num_qubits,
+            **kwargs
+        )
+        
+        return results
+
     def refine_assignment(self, level, num_levels, assignment, mapping_list, sparse=False, full_subgraph=None, next_graph=None, qpu_sizes=None):
         new_assignment = assignment
         if sparse:
@@ -130,35 +149,6 @@ class QuantumCircuitPartitioner:
                     new_assignment[t] = assignment[super_node_t]
 
         return new_assignment
-    
-    # def refine_assignment_sparse(self, level, num_levels, assignment, mapping_list, subgraph, next_graph, qpu_sizes):
-    #     new_assignment = assignment
-    #     unassigned_nodes = set()
-    #     if level < num_levels - 1:
-    #         for super_node_t in mapping_list[level]:
-    #             for t in mapping_list[level][super_node_t]:
-    #                 for q in range(len(assignment[0])):
-    #                     if (q,t) in next_graph.nodes and (q, super_node_t) in next_graph.nodes:
-    #                         new_assignment[t][q] = assignment[super_node_t][q]
-    #                     elif (q, t) in next_graph.nodes and (q, super_node_t) not in next_graph.nodes:
-    #                         unassigned_nodes.add((q, t))
-
-    #     partition_counts = [{qpu: 0 for qpu in qpu_sizes.keys()} for t in range(assignment.shape[0])]
-    #     for node in set(subgraph.nodes) - unassigned_nodes:
-    #         if isinstance(node, tuple) and len(node) == 2:
-    #             q, t = node
-    #             node_partition = assignment[t][q]
-    #             partition_counts[t][node_partition] += 1
-        
-    #     for node in unassigned_nodes:
-    #         q, t = node
-    #         for partition, size in qpu_sizes.items():
-    #             if partition_counts[t][partition] < size:
-    #                 new_assignment[t][q] = partition
-    #                 partition_counts[t][partition] += 1
-    #                 break
-    #     return new_assignment
-
 
     def refine_assignment_sparse(self, level, num_levels, assignment, mapping_list, subgraph, next_graph, qpu_sizes):
         new_assignment = assignment

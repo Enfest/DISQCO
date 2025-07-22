@@ -56,29 +56,29 @@ def set_initial_partitions_sparse(assignment, active_nodes, qpu_sizes, subgraph)
                 index = spaces[i].pop(0)
                 # print(f"Assigning index {index} to QPU {qpu} in layer {i}")
                 sparse_assignment[i][idx] = index
-    print("Sparse assignment after setting initial partitions:", sparse_assignment)
     return sparse_assignment
 
 def partition_and_build_subgraph(
     source_node, subgraph, level_idx, 
     network_level_list, parent_assignment, 
-    num_qubits, hypergraph, initial_network, 
+    num_qubits, hypergraph,
     hypergraph_coarsener,
     sub_graph_manager, build_next_level, 
-    ML_internal_level_limit: int | None = None, passes_per_level : int =10
+    ML_internal_level_limit: int | None = None, passes_per_level : int = 10
 ):
     try:
-        sub_network = network_level_list[level_idx + 1][source_node]
+        sub_network = network_level_list[level_idx][source_node]
         active_nodes = sub_network.active_nodes
         qpu_sizes = {node: sub_network.qpu_graph.nodes[node]['size'] for node in active_nodes}
         node_map = {node: idx for idx, node in enumerate(active_nodes)}
-
+        
         sparse_assignment = set_initial_partitions_sparse(
             assignment=parent_assignment,
             active_nodes=active_nodes,
             qpu_sizes=qpu_sizes,
             subgraph=subgraph
         )
+
         partitioner = FiducciaMattheyses(
             circuit=None,
             initial_assignment=sparse_assignment,
@@ -94,13 +94,15 @@ def partition_and_build_subgraph(
             node_map=node_map,
             sparse=True
         )
-        results = partitioner.partition(coarsener=hypergraph_coarsener, sparse=True, level_limit=ML_internal_level_limit)
+        results = partitioner.partition(coarsener=hypergraph_coarsener, 
+                                        sparse=True, level_limit=ML_internal_level_limit, 
+                                        passes_per_level=passes_per_level)
 
         sparse_assignment = results['best_assignment']
         final_cost = results['best_cost']
         
         next_level_subgraphs = {}
-        if build_next_level and level_idx + 2 < len(network_level_list):
+        if build_next_level and level_idx + 1 < len(network_level_list):
             existing_dummy_nodes = set()
             for node in subgraph.nodes:
                 if isinstance(node, tuple) and len(node) > 0 and node[0] == 'dummy':
@@ -110,7 +112,7 @@ def partition_and_build_subgraph(
                 graph=subgraph,
                 assignment=sparse_assignment,
                 current_network=sub_network,
-                new_networks=network_level_list[level_idx + 2],
+                new_networks=network_level_list[level_idx + 1],
                 old_dummy_nodes=existing_dummy_nodes
             )
         return {

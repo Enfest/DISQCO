@@ -1,7 +1,7 @@
 # src/disqco/parti/FM/fiduccia_ext.py
 from disqco.parti.partitioner import QuantumCircuitPartitioner
 from disqco.parti.FM.FM_methods_ext import *
-from disqco.parti.FM.FM_main_ext import run_FM          # single-pass driver
+from disqco.parti.FM.FM_main_ext import run_FM, partition_multilevel          # single-pass driver
 from disqco.graphs.GCP_hypergraph_extended import HyperGraph
 from disqco.graphs.quantum_network import QuantumNetwork
 from qiskit import QuantumCircuit

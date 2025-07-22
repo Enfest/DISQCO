@@ -55,7 +55,8 @@ def FM_pass(graph: HyperGraph,
             num_partitions : int,
             qpu_sizes : list[int],
             limit: int,
-            active_nodes: Iterable[Hashable] | None = None
+            active_nodes: Iterable[Hashable] | None = None,
+            costs: dict[Hashable, int] | None = None
 ):
     """
     One Kernighan–Lin / Fiduccia–Mattheyses pass on *graph*.
@@ -69,7 +70,7 @@ def FM_pass(graph: HyperGraph,
     # assign_all_counts_and_configs(graph, assignment, num_partitions)
     locked      = _unlock_all(graph)
     
-    gain_dict = find_all_gains(graph, qubit_assignment, gate_assignment, num_partitions, locked)
+    gain_dict = find_all_gains(graph, qubit_assignment, gate_assignment, num_partitions, locked, costs)
     # for action, gain in gain_dict.items():
     #     print(f'Checking action: {action}, gain: {gain}')
     buckets   = _build_buckets(gain_dict, max_gain)
@@ -86,7 +87,6 @@ def FM_pass(graph: HyperGraph,
 
     h = 0
     while h < limit:
-
         out = choose_action(buckets, qubit_assignment, locked,
                                      max_gain, spaces)
         if out is None:

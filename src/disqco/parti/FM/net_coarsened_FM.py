@@ -51,8 +51,6 @@ def stitch_solution_sparse(subgraphs, sub_assignments, num_qubits, depth):
     import numpy as np
     
     # Initialize final assignment with -1 (unassigned)
-    print(f"Sub assignments: {sub_assignments}")
-    print(f"Subgraphs: {subgraphs}")
     final_assignment = np.full((depth, num_qubits), -1, dtype=int)
     
     for i, (source_node, subgraph) in enumerate(subgraphs.items()):
@@ -69,7 +67,6 @@ def stitch_solution_sparse(subgraphs, sub_assignments, num_qubits, depth):
             final_assignment[t][q] = sparse_assignment
             
     
-    print(f"Final assignment: {final_assignment}")
     return final_assignment
 
 def run_net_coarsened_FM(graph, initial_network, l=4, multiprocessing=True, level_limit = None, passes_per_level=10):
