@@ -438,6 +438,8 @@ def update_config(old_config,
 
 def find_member_random(set):
     member = random.choice(list(set))
+    # for member in set: # Choose first element 
+    #     break
     return member
 
 def find_action(buckets,lock_dict,spaces,max_gain):

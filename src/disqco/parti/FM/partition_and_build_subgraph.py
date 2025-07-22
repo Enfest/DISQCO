@@ -1,44 +1,24 @@
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 from disqco.parti.FM.FM_hetero import run_FM_sparse
+from disqco.parti.FM.fiduccia import FiducciaMattheyses
 import numpy as np
 
 def refine_assignment_sparse(level, num_levels, assignment, mapping_list, subgraph, next_graph, qpu_sizes):
     new_assignment = assignment
-    # First check assignment validity
-    # if not check_assignment_validity(new_assignment, qpu_sizes, subgraph):
-    #     print(f"Invalid assignment at level {level}. Cannot refine.")
-    #     raise ValueError("Invalid assignment")
     unassigned_nodes = {}
-
-    # Handle both 2D arrays and lists of lists
-    # for node in set(subgraph.nodes) - unassigned_nodes:
-    #     if isinstance(node, tuple) and len(node) == 2:
-    #         q, t = node
-    #         node_partition = assignment[t][q]
-    #         partition_counts[t][node_partition] += 1
-    
     if level < num_levels - 1:
         for super_node_t in mapping_list[level]:
-            # print(f"Refining assignment for super node {super_node_t} at level {level}")
-            # print(f"  Contained time steps: {mapping_list[level][super_node_t]}")
             for t in mapping_list[level][super_node_t]:
                 for q in range(len(assignment[0])):
-                    # super_node_t = mapping_list[level][super_node_t]  # Get the first time step in the super node
-                    
                     if (q,t) in subgraph.nodes and (q, super_node_t) in subgraph.nodes:
-                        # print(f"  Assigning qubit {(q,t)} to super node {(q,super_node_t)}")
-                        # if t < len(new_assignment) and super_node_t < len(assignment):
                         new_assignment[t][q] = assignment[super_node_t][q]
                     elif (q, t) in subgraph.nodes and (q, super_node_t) not in subgraph.nodes:
-                        # print(f"New qubit has entered, assign where space is available after others")
                         target_partition = assignment[super_node_t][q]
                         unassigned_nodes[(q, t)] = target_partition
 
 
 
     partition_counts = [{qpu: 0 for qpu in qpu_sizes.keys()} for t in range(assignment.shape[0])]
-    
-    # Handle both 2D arrays and lists of lists
     for node in set(subgraph.nodes) - unassigned_nodes.keys():
         if isinstance(node, tuple) and len(node) == 2:
             q, t = node
@@ -47,44 +27,18 @@ def refine_assignment_sparse(level, num_levels, assignment, mapping_list, subgra
 
     for node in unassigned_nodes.keys():
         q, t = node
-        # target_partition = unassigned_nodes[node]
-        # if partition_counts[t][target_partition] < size:
-        #     new_assignment[t][q] = target_partition
-        #     partition_counts[t][target_partition] += 1
-        #     # print(f"Assigned unassigned node {(q,t)} to partition {partition}")
-        #     continue
         # Find the first partition with available space
         for partition, size in qpu_sizes.items():
             if partition_counts[t][partition] < size:
                 new_assignment[t][q] = partition
                 partition_counts[t][partition] += 1
-                # print(f"Assigned unassigned node {(q,t)} to partition {partition}")
                 break
-        # else:
-        #     print(f"No available partition for unassigned node {(q,t)}")
 
     return new_assignment
-
-# def refine_assignment_sparse(level, num_levels, assignment, mapping_list, subgraph):
-#     """
-#     Refine the assignment after each coarsening level using the mapping.
-#     """
-#     new_assignment = assignment.copy()
-#     if level < num_levels - 1:
-#         mapping = mapping_list[level]
-#         for super_node_t in mapping:
-#             for t in mapping[super_node_t]:
-#                 for q in range(len(assignment[0]) if len(assignment) > 0 else 0):
-#                     if (q, t) in subgraph.nodes and (q, super_node_t) in subgraph.nodes:
-#                         if t < len(new_assignment) and super_node_t < len(assignment):
-#                             new_assignment[t][q] = assignment[super_node_t][q]
-#     return new_assignment
-
 
 def set_initial_partitions_sparse(assignment, active_nodes, qpu_sizes, subgraph):
     sparse_assignment = assignment.copy()
     depth = len(assignment)
-
     spaces = [] 
     for i in range(depth):
         spaces_layer = []
@@ -102,13 +56,14 @@ def set_initial_partitions_sparse(assignment, active_nodes, qpu_sizes, subgraph)
                 index = spaces[i].pop(0)
                 # print(f"Assigning index {index} to QPU {qpu} in layer {i}")
                 sparse_assignment[i][idx] = index
-    
+    print("Sparse assignment after setting initial partitions:", sparse_assignment)
     return sparse_assignment
 
 def partition_and_build_subgraph(
     source_node, subgraph, level_idx, 
     network_level_list, parent_assignment, 
     num_qubits, hypergraph, initial_network, 
+    hypergraph_coarsener,
     sub_graph_manager, build_next_level, 
     ML_internal_level_limit: int | None = None, passes_per_level : int =10
 ):
@@ -117,68 +72,40 @@ def partition_and_build_subgraph(
         active_nodes = sub_network.active_nodes
         qpu_sizes = {node: sub_network.qpu_graph.nodes[node]['size'] for node in active_nodes}
         node_map = {node: idx for idx, node in enumerate(active_nodes)}
-        dummy_nodes = set()
-        for node in subgraph.nodes:
-            if isinstance(node, tuple) and len(node) >= 3 and node[0] == 'dummy':
-                dummy_nodes.add(node)
-                qpu = node[2]
-                if qpu not in node_map:
-                    node_map[qpu] = len(node_map)
+
         sparse_assignment = set_initial_partitions_sparse(
             assignment=parent_assignment,
             active_nodes=active_nodes,
             qpu_sizes=qpu_sizes,
             subgraph=subgraph
         )
-        coarsener = HypergraphCoarsener()
-        graph_list, mapping_list = coarsener.coarsen_recursive_subgraph_batch(subgraph)
-        # Assignment refinement after each coarsening level
-        initial_num_levels = len(graph_list)
+        partitioner = FiducciaMattheyses(
+            circuit=None,
+            initial_assignment=sparse_assignment,
+            hypergraph=subgraph,
+            qpu_info=qpu_sizes,
+            num_partitions=len(active_nodes),
+            active_nodes=active_nodes,
+            limit=num_qubits,
+            max_gain=4*hypergraph.depth,
+            passes=passes_per_level,
+            stochastic=True,
+            network=sub_network,
+            node_map=node_map,
+            sparse=True
+        )
+        results = partitioner.partition(coarsener=hypergraph_coarsener, sparse=True, level_limit=ML_internal_level_limit)
 
-        graph_list = graph_list[::-1]
-        mapping_list = mapping_list[::-1]
-
-        for level, (graph, mapping) in enumerate(zip(graph_list, mapping_list)):
-
-            if level < ML_internal_level_limit or ML_internal_level_limit is None:
-
-                final_cost, final_assignment, _ = run_FM_sparse(
-                    hypergraph=graph,
-                    initial_assignment=sparse_assignment,
-                    qpu_info=qpu_sizes,
-                    num_partitions=len(active_nodes),
-                    active_nodes=active_nodes,
-                    limit=num_qubits,
-                    max_gain=4*hypergraph.depth,
-                    passes=passes_per_level,
-                    stochastic=True,
-                    log=False,
-                    network=sub_network,
-                    node_map=node_map,
-                    dummy_nodes=dummy_nodes
-                )
-            else:
-                final_assignment = sparse_assignment
-
-            sparse_assignment = refine_assignment_sparse(
-                level=level,
-                num_levels=len(graph_list),
-                assignment=final_assignment,
-                mapping_list=mapping_list,
-                subgraph=subgraph,
-                next_graph=graph_list[level + 1] if level + 1 < len(graph_list) else None,
-                qpu_sizes=qpu_sizes
-            )
-
+        sparse_assignment = results['best_assignment']
+        final_cost = results['best_cost']
         
-            # if ML_internal_level_limit is not None and level >= ML_internal_level_limit:
-            #     break
         next_level_subgraphs = {}
         if build_next_level and level_idx + 2 < len(network_level_list):
             existing_dummy_nodes = set()
             for node in subgraph.nodes:
                 if isinstance(node, tuple) and len(node) > 0 and node[0] == 'dummy':
                     existing_dummy_nodes.add(node)
+            
             next_level_subgraphs = sub_graph_manager.build_partition_subgraphs(
                 graph=subgraph,
                 assignment=sparse_assignment,

@@ -23,6 +23,7 @@ class QuantumCircuitHyperGraph:
         self.hyperedge_attrs = {}
         self.circuit = circuit
         self.num_qubits = circuit.num_qubits
+        self.num_qubits_init = self.num_qubits
         self.depth = circuit.depth()
         if map_circuit:
             self.init_from_circuit(group_gates, anti_diag, qpu_sizes=qpu_sizes)

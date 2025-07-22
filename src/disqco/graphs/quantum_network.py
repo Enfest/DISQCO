@@ -340,6 +340,19 @@ def network_of_grids(num_grids, nodes_per_grid, l):
 
     return all_edges
 
+def all_to_all(N):
+    """
+    Create a fully connected network of N nodes.
+
+    Returns:
+        A list of edges in the format [[node1, node2], ...].
+    """
+    edges = []
+    for i in range(N):
+        for j in range(i + 1, N):
+            edges.append([i, j])
+    return edges
+
 def tree_network(N, k=2):
     """
     Create a tree-like network of N nodes. Calculate height of tree as logk(N).

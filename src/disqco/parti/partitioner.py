@@ -9,9 +9,9 @@ class QuantumCircuitPartitioner:
     """
     Base class for quantum circuit partitioners.
     """
-    def __init__(self, circuit : QuantumCircuit, 
-                 network: QuantumNetwork, 
-                 initial_assignment: np.ndarray | None
+    def __init__(self, circuit : QuantumCircuit | None = None, 
+                 network: QuantumNetwork | None = None, 
+                 initial_assignment: np.ndarray | None = None
                  ) -> None:
         """
         Initialize the CircuitPartitioner.
@@ -70,7 +70,6 @@ class QuantumCircuitPartitioner:
         mapping_list = mapping_list[::-1]
         graph_list = graph_list[:level_limit]
         mapping_list = mapping_list[:level_limit]
-
         pass_list = [10] * level_limit
 
         
@@ -113,8 +112,8 @@ class QuantumCircuitPartitioner:
             list_of_assignments.append(assignment)
             list_of_costs.append(best_cost)
         
-        final_cost = min(list_of_costs)
-        final_assignment = list_of_assignments[np.argmin(list_of_costs)]
+        final_cost = list_of_costs[-1]
+        final_assignment = list_of_assignments[-1]
 
         results = {'best_cost' : final_cost, 'best_assignment' : final_assignment}
 
@@ -123,7 +122,7 @@ class QuantumCircuitPartitioner:
     def refine_assignment(self, level, num_levels, assignment, mapping_list, sparse=False, full_subgraph=None, next_graph=None, qpu_sizes=None):
         new_assignment = assignment
         if sparse:
-            new_assignment = self.refine_assignment_sparse(level, num_levels, assignment, mapping_list, full_subgraph, next_graph, qpu_sizes)
+            return self.refine_assignment_sparse(level, num_levels, assignment, mapping_list, full_subgraph, next_graph, qpu_sizes)
         if level < num_levels -1:
             mapping = mapping_list[level]
             for super_node_t in mapping:
@@ -132,31 +131,65 @@ class QuantumCircuitPartitioner:
 
         return new_assignment
     
+    # def refine_assignment_sparse(self, level, num_levels, assignment, mapping_list, subgraph, next_graph, qpu_sizes):
+    #     new_assignment = assignment
+    #     unassigned_nodes = set()
+    #     if level < num_levels - 1:
+    #         for super_node_t in mapping_list[level]:
+    #             for t in mapping_list[level][super_node_t]:
+    #                 for q in range(len(assignment[0])):
+    #                     if (q,t) in next_graph.nodes and (q, super_node_t) in next_graph.nodes:
+    #                         new_assignment[t][q] = assignment[super_node_t][q]
+    #                     elif (q, t) in next_graph.nodes and (q, super_node_t) not in next_graph.nodes:
+    #                         unassigned_nodes.add((q, t))
+
+    #     partition_counts = [{qpu: 0 for qpu in qpu_sizes.keys()} for t in range(assignment.shape[0])]
+    #     for node in set(subgraph.nodes) - unassigned_nodes:
+    #         if isinstance(node, tuple) and len(node) == 2:
+    #             q, t = node
+    #             node_partition = assignment[t][q]
+    #             partition_counts[t][node_partition] += 1
+        
+    #     for node in unassigned_nodes:
+    #         q, t = node
+    #         for partition, size in qpu_sizes.items():
+    #             if partition_counts[t][partition] < size:
+    #                 new_assignment[t][q] = partition
+    #                 partition_counts[t][partition] += 1
+    #                 break
+    #     return new_assignment
+
+
     def refine_assignment_sparse(self, level, num_levels, assignment, mapping_list, subgraph, next_graph, qpu_sizes):
         new_assignment = assignment
-        unassigned_nodes = set()
+        unassigned_nodes = {}
+        # Print all inputs
         if level < num_levels - 1:
             for super_node_t in mapping_list[level]:
                 for t in mapping_list[level][super_node_t]:
                     for q in range(len(assignment[0])):
-                        if (q,t) in next_graph.nodes and (q, super_node_t) in next_graph.nodes:
+                        if (q,t) in subgraph.nodes and (q, super_node_t) in subgraph.nodes:
                             new_assignment[t][q] = assignment[super_node_t][q]
-                        elif (q, t) in next_graph.nodes and (q, super_node_t) not in next_graph.nodes:
-                            unassigned_nodes.add((q, t))
+                        elif (q, t) in subgraph.nodes and (q, super_node_t) not in subgraph.nodes:
+                            target_partition = assignment[super_node_t][q]
+                            unassigned_nodes[(q, t)] = target_partition
+
+
 
         partition_counts = [{qpu: 0 for qpu in qpu_sizes.keys()} for t in range(assignment.shape[0])]
-        for node in set(subgraph.nodes) - unassigned_nodes:
+        for node in set(subgraph.nodes) - unassigned_nodes.keys():
             if isinstance(node, tuple) and len(node) == 2:
                 q, t = node
                 node_partition = assignment[t][q]
                 partition_counts[t][node_partition] += 1
-        
-        for node in unassigned_nodes:
+
+        for node in unassigned_nodes.keys():
             q, t = node
+            # Find the first partition with available space
             for partition, size in qpu_sizes.items():
                 if partition_counts[t][partition] < size:
                     new_assignment[t][q] = partition
                     partition_counts[t][partition] += 1
                     break
+      
         return new_assignment
-        

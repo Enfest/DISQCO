@@ -54,7 +54,6 @@ def run_full_net_coarsened_FM(
         depth=hypergraph.depth,
         node_map=coarsest_node_map,
     )
-    print(f"Processing level {0}/{len(network_level_list) - 1}")
     from disqco.parti.FM.fiduccia import FiducciaMattheyses
     FM_partitioner = FiducciaMattheyses(circuit=circuit,
                                         network=coarsest_network,
@@ -101,19 +100,20 @@ def multilevel_network_partitioning(
     num_qubits,
     hypergraph,
     initial_network,
+    hypergraph_coarsener=HypergraphCoarsener().coarsen_recursive_subgraph_batch,
     use_multiprocessing=False,
     num_processes=None,
     ML_internal_level_limit=6,
     passes_per_level=10
 ):
+    print(sub_graph_manager)
     all_level_assignments = []
     current_subgraphs = initial_subgraphs
     parent_assignment = initial_assignment
     for level_idx in range(len(network_level_list) - 1):
-        print(f"Processing level {level_idx + 1}/{len(network_level_list) - 1}")
         build_next_level = (level_idx + 2 < len(network_level_list))
         args_list = [
-            (source_node, subgraph, level_idx, network_level_list, parent_assignment, num_qubits, hypergraph, initial_network, sub_graph_manager, build_next_level, ML_internal_level_limit, passes_per_level)
+            (source_node, subgraph, level_idx, network_level_list, parent_assignment, num_qubits, hypergraph, initial_network, hypergraph_coarsener, sub_graph_manager, build_next_level, ML_internal_level_limit, passes_per_level)
             for source_node, subgraph in current_subgraphs.items()
         ]
         if use_multiprocessing and len(args_list) > 1:

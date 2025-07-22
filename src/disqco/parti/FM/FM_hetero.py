@@ -201,6 +201,8 @@ def FM_pass_sparse(hypergraph,
     from disqco.graphs.hypergraph_methods import map_counts_and_configs_hetero
     
     # Calculate available spaces using sparse method
+    # Print all inputs
+
     spaces = find_spaces(assignment=assignment, 
                                 qpu_sizes=qpu_info, 
                                 graph=hypergraph)
@@ -310,6 +312,8 @@ def run_FM_sparse(hypergraph,
     from disqco.parti.FM.FM_methods import calculate_full_cost_hetero
     from networkx import diameter
     import numpy as np
+
+    # Print all inputs
     
     if network is None:
         from disqco.graphs.quantum_network import QuantumNetwork
@@ -334,8 +338,7 @@ def run_FM_sparse(hypergraph,
                                               node_map=node_map, 
                                               dummy_nodes=dummy_nodes)
     
-    if log:
-        print("Initial cost:", initial_cost)
+    print("Initial cost:", initial_cost)
     
     if max_gain is None:
         max_gain = 4 * diameter(network.qpu_graph)
