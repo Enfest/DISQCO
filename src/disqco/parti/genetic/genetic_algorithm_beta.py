@@ -1,12 +1,10 @@
 from typing import List, Callable, Tuple
 import numpy as np
 import random
-from functools import partial
 import multiprocessing as mp
 from qiskit import transpile
 from scipy.special import softmax
-from disqco.graphs.GCP_hypergraph import *
-from disqco.parti.FM.FM_methods import set_initial_partitions
+from disqco.graphs.QC_hypergraph import *
 from disqco.graphs.hypergraph_methods import *
 from disqco.parti.FM.FM_methods import move_node
 import time

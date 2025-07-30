@@ -1,208 +1,227 @@
-
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.path import Path as MplPath
+import matplotlib.patches as patches
 from disqco.drawing.map_positions import space_mapping, get_pos_list
 
-def hypergraph_to_matplotlib(
+def draw_hypergraph_mpl(
     H,
     assignment,
     qpu_info,
-    xscale = None,
-    yscale = None,
-    figsize= (10, 6),
-    save= False,
-    path= None,
-    ax= None
+    xscale=None,
+    yscale=None,
+    show_labels=True,
+    invert_colors=False,
+    fill_background=True,
+    assignment_map=None,
+    remove_intermediate_roots=False,
+    ax=None,
+    figsize=(10, 6),
+    save_path=None,
+    dpi=150,
 ):
-    """
-    Draw a QuantumCircuitHyperGraph 'H' with Matplotlib, placing a blank
-    horizontal row between each partition. The *logical* partition of a node
-    is taken from assignment[t][q], so nodes can move between partitions over time.
+    if isinstance(qpu_info, dict):
+        qpu_sizes = list(qpu_info.values())
+    else:
+        qpu_sizes = qpu_info
+    depth = getattr(H, 'depth', 0)
+    num_qubits = getattr(H, 'num_qubits', 0)
+    num_qubits_phys = sum(qpu_sizes)
 
-    qpu_info = [p0_size, p1_size, ... ] says how many "vertical slots" each partition has.
-    We'll stack partitions vertically in order: partition 0 at top, then a blank row,
-    partition 1, another blank row, etc.
-    """
-    num_qubits = H.num_qubits
-    depth = H.depth
     if xscale is None:
-        xscale = 10/depth
+        xscale = 10.0 / depth if depth else 1
     if yscale is None:
-        yscale = 6/(sum(qpu_info) + len(qpu_info))
+        yscale = 6.0 / num_qubits if num_qubits else 1
 
+    node_scale = min(0.6, max(0.3, 1.0 / (max(depth, num_qubits) ** 0.5)))
+    gate_node_scale = node_scale * 1.2
+    small_node_scale = node_scale * 0.5
 
-
-    space_map_ = space_mapping(qpu_info, depth)
-    pos_list = get_pos_list(H, num_qubits, assignment, space_map_)
+    space_map = space_mapping(qpu_sizes, depth)
+    pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
     else:
         fig = ax.figure
 
-    if H.nodes:
-        max_time = max(n[1] for n in H.nodes)
+    if fill_background:
+        ax.set_facecolor('black' if invert_colors else 'white')
     else:
-        max_time = 0
+        ax.set_facecolor('none')
+
+    node_colors = {
+        'black': 'black' if not invert_colors else 'white',
+        'white': 'white',
+        'grey': 'grey',
+        'dummy': 'blue',
+        'invisible': 'none',
+    }
+    edge_color = 'black' if not invert_colors else 'white'
+    boundary_color = 'black' if not invert_colors else 'white'
+
+    def pick_position(node):
+        if isinstance(node, tuple) and len(node) == 3 and node[0] == "dummy":
+            _, p, pprime = node
+            x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2
+            y = (-2) * yscale * 0.8
+            return (x, y)
+        if isinstance(node, tuple) and len(node) == 2:
+            if assignment_map is not None:
+                q, t = assignment_map[node]
+            else:
+                q, t = node
+            x = t * xscale
+            y = (num_qubits_phys - pos_list[t][q]) * yscale
+            return (x, y)
+        return (0, 0)
 
     def pick_style(node):
-        """Return (facecolor, edgecolor, marker, size) or None if invisible."""
-        q, t = node
-        node_type = H.get_node_attribute(node, 'type', None)
-
-        # default style
-        facecolor = 'white'
-        edgecolor = 'black'
-        marker = 'o'
-        size = 30
-
-        if node_type in ["group", "two-qubit"]:
-            facecolor = "black"
-            edgecolor = "black"
-            marker = "o"
-            size = 30
-        elif node_type == "root_t":
-            facecolor = "black"
-            edgecolor = "black"
-            marker = "o"
-            size = 30
-        elif node_type == "single-qubit":
-            facecolor = "gray"
-            edgecolor = "black"
-            marker = "o"
-            size = 30
-        else:
-            return None
-        return facecolor, edgecolor, marker, size
-
-    node_positions = {}
-    for n in H.nodes:
-        q, t = n
-        p = assignment[t][q]
-
-        local_index = pos_list[t][q]
-
-        base_y = local_index
-        y = base_y * yscale
-
-        x = t * xscale
-
-        node_positions[n] = (x, y)
-
-        style = pick_style(n)
-        if style is not None:
-            facecolor, edgecolor, marker, size = style
-            ax.scatter(
-                [x],
-                [y],
-                c=facecolor,
-                edgecolors=edgecolor,
-                marker=marker,
-                s=size,
-                zorder=3
-            )
-
-    for edge_id, edge_info in H.hyperedges.items():
-        if isinstance(edge_id, tuple) and isinstance(edge_id[1], int):
-            roots = edge_info.get("root_set", [])
-            root_node = edge_id
-            root_t = edge_id[1]
-            for rnode in roots:
-                if isinstance(root_t, int):
-                    min_t = root_t
-                else:
-                    min_t = root_t[1]
-                if rnode[1] < min_t:
-                    root_node = rnode
-                    root_t = rnode[1]
-
-            receivers = edge_info.get("receiver_set", [])
-            if root_node in node_positions:
-                rx, ry = node_positions[root_node]
+        if hasattr(H, 'get_node_attribute') and H.get_node_attribute(node, 'dummy', False):
+            return 'dummy'
+        node_type = H.get_node_attribute(node, 'type', None) if hasattr(H, 'get_node_attribute') else None
+        if node_type in ("group", "two-qubit"):
+            if hasattr(H, 'node_attrs') and H.node_attrs[node].get('name') == "target":
+                return 'white'
             else:
-                continue
-
-            if len(receivers) > 1:
-                offset_x = rx + 0.3 * xscale
-                offset_y = ry - 0.3 * yscale
-                ax.plot([rx, offset_x], [ry, offset_y], color="black", zorder=2)
-                for rnode in receivers:
-                    if rnode in node_positions:
-                        rxr, ryr = node_positions[rnode]
-                        ax.plot([offset_x, rxr], [offset_y, ryr], color="black", zorder=2)
-                roots = edge_info.get("root_set", [])
-                for rnode in roots:
-                    if rnode in node_positions:
-                        rxr, ryr = node_positions[rnode]
-                        ax.plot([offset_x, rxr], [offset_y, ryr], color="black", zorder=2)
-            elif len(receivers) == 1:
-                rnode = list(receivers)[0]
-                if rnode in node_positions:
-                    rxr, ryr = node_positions[rnode]
-                    ax.plot([rx, rxr], [ry, ryr], color="black", zorder=2)
+                return 'black'
+        elif node_type == "root_t":
+            if remove_intermediate_roots:
+                return 'invisible'
+            else:
+                return 'black'
+        elif node_type == "single-qubit":
+            params = H.get_node_attribute(node, 'params', None) if hasattr(H, 'get_node_attribute') else None
+            if params is not None and len(params) > 0:
+                params_sum = sum(abs(x) for x in params)
+                if params_sum < 1e-10:
+                    return 'invisible'
+            return 'grey'
         else:
-            root_set = edge_info.get("root_set", [])
-            rec_set = edge_info.get("receiver_set", [])
-            if not root_set or not rec_set:
-                continue
-            node1 = list(root_set)[0]
-            node2 = list(rec_set)[0]
-            if node1 in node_positions and node2 in node_positions:
-                x1, y1 = node_positions[node1]
-                x2, y2 = node_positions[node2]
-                ax.plot([x1, x2], [y1, y2], color="black", zorder=2)
+            return 'invisible'
 
+    node_pos = {}
     for n in H.nodes:
-        q, t = n
-        if n not in node_positions:
+        x, y = pick_position(n)
+        node_pos[n] = (x, y)
+        style = pick_style(n)
+        color = node_colors.get(style, 'grey')
+        if style == 'invisible':
             continue
-        rx, ry = node_positions[n]
+        size = 200 * (gate_node_scale if (isinstance(n, tuple) and len(n) == 3) else node_scale)
+        ax.scatter(x, y, s=size, c=color, edgecolors='k', zorder=3)
+        if show_labels and style != 'dummy':
+            if isinstance(n, tuple) and len(n) == 2:
+                q, t = n
+                ax.text(x, y+0.1, f"({q},{t})", fontsize=8, ha='center', va='bottom', color='k' if not invert_colors else 'w', zorder=4)
 
-        if t == 0:
-            ghost_t = -1
-            ghost_x = ghost_t * xscale
-            ghost_y = ry
-            ax.scatter(
-                [ghost_x],
-                [ghost_y],
-                c="white",
-                edgecolors="black",
-                marker="o",
-                s=20,
-                zorder=4
-            )
-            ax.plot([ghost_x, rx], [ghost_y, ry], color="black", zorder=2)
-        elif t == max_time:
-            ghost_t = max_time + 1
-            ghost_x = ghost_t * xscale
-            ghost_y = ry
-            ax.scatter(
-                [ghost_x],
-                [ghost_y],
-                c="white",
-                edgecolors="black",
-                marker="o",
-                s=20,
-                zorder=4
-            )
-            ax.plot([rx, ghost_x], [ry, ghost_y], color="black", zorder=2)
+    for edge_id, edge_info in getattr(H, 'hyperedges', {}).items() if hasattr(H, 'hyperedges') else []:
+        roots = list(edge_info['root_set'])
+        receivers = list(edge_info['receiver_set'])
+        all_nodes = roots + receivers
+        if len(all_nodes) == 2:
+            n1, n2 = all_nodes
+            x1, y1 = node_pos.get(n1, (0, 0))
+            x2, y2 = node_pos.get(n2, (0, 0))
+            # Only bend if q indices are different
+            if (
+                isinstance(n1, tuple) and isinstance(n2, tuple)
+                and len(n1) == 2 and len(n2) == 2
+                and n1[0] != n2[0]
+            ):
+                dx, dy = x2 - x1, y2 - y1
+                norm = np.hypot(dx, dy)
+                if norm == 0:
+                    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+                else:
+                    px, py = -dy / norm, dx / norm
+                    bend = 0.3 * yscale
+                    mx, my = (x1 + x2) / 2 + px * bend, (y1 + y2) / 2 + py * bend
+                path = np.array([[x1, y1], [mx, my], [x2, y2]])
+                verts = [tuple(path[0]), tuple(path[1]), tuple(path[2])]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
+                ax.add_patch(bezier)
+            else:
+                # Draw straight line for same q index
+                ax.plot([x1, x2], [y1, y2], color=edge_color, lw=1.5, zorder=2)
+        elif roots and receivers:
+            # Central node logic
+            root_times = [n[1] for n in roots if isinstance(n, tuple) and len(n) == 2]
+            rec_times = [n[1] for n in receivers if isinstance(n, tuple) and len(n) == 2]
+            if root_times and rec_times:
+                min_time = min(root_times + rec_times)
+                max_time = max(root_times + rec_times)
+                central_x = (min_time + max_time) / 2 * xscale
+            else:
+                central_x = 0
+            rec_ys = [node_pos[n][1] for n in receivers if n in node_pos]
+            root_y = node_pos[roots[0]][1] if roots and roots[0] in node_pos else 0
+            if rec_ys:
+                avg_rec_y = sum(rec_ys) / len(rec_ys)
+                if avg_rec_y > root_y:
+                    central_y = root_y + 0.5 * yscale
+                else:
+                    central_y = root_y - 0.5 * yscale
+            else:
+                central_y = root_y
+            # Roots to central node (bend up)
+            for root in roots:
+                x0, y0 = node_pos.get(root, (0, 0))
+                mx, my = (x0 + central_x) / 2, (y0 + central_y) / 2 + 0.5 * yscale
+                path = np.array([[x0, y0], [mx, my], [central_x, central_y]])
+                verts = [tuple(path[0]), tuple(path[1]), tuple(path[2])]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
+                ax.add_patch(bezier)
+            # Central node to receivers (bend down)
+            for rec in receivers:
+                x1, y1 = node_pos.get(rec, (0, 0))
+                mx, my = (central_x + x1) / 2, (central_y + y1) / 2 - 0.5 * yscale
+                path = np.array([[central_x, central_y], [mx, my], [x1, y1]])
+                verts = [tuple(path[0]), tuple(path[1]), tuple(path[2])]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
+                ax.add_patch(bezier)
 
-    ax.set_aspect("equal", adjustable="datalim")
-    ax.set_xlabel("Time Layer (scaled by xscale)")
-    ax.set_ylabel("Vertical index within assigned partition")
-    plt.axis("off")
+    buffer_left_time = -1
+    buffer_right_time = depth
+    for qubit in range(num_qubits):
+        left_x = buffer_left_time * xscale
+        left_y_val = pos_list[0][qubit]
+        if left_y_val is None:
+            left_y_val = qubit
+        left_y = (num_qubits_phys - int(left_y_val)) * yscale
+        right_x = buffer_right_time * xscale
+        right_y_val = pos_list[depth-1][qubit]
+        if right_y_val is None:
+            right_y_val = qubit
+        right_y = (num_qubits_phys - int(right_y_val)) * yscale
+        ax.scatter(left_x, left_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+        ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+        ax.plot([left_x, node_pos.get((qubit, 0), (left_x, left_y))[0]], [left_y, node_pos.get((qubit, 0), (left_x, left_y))[1]], color=edge_color, lw=1, zorder=2)
+        ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
+        # Always show q_i labels at the start
+        ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', color='k' if not invert_colors else 'w', zorder=4)
 
-    if save and path:
-        plt.savefig(path, bbox_inches="tight")
+    # Draw partition boundaries and Q_i labels
+    for i in range(1, len(qpu_sizes)):
+        boundary = sum(qpu_sizes[:i])
+        line_y = (num_qubits_phys - boundary + 0.5) * yscale
+        ax.axhline(line_y, color=boundary_color, linestyle='--', lw=1, zorder=10)
+        # Add Q_i label above the boundary line on the far right, starting from Q_0
+        ax.text((depth + 1.5) * xscale, line_y + 0.5 * yscale, f"$Q_{{{i-1}}}$", fontsize=18, ha='left', va='bottom', color=boundary_color, zorder=20)
 
-    return fig, ax
+    # Add a final QPU label for the last partition (Q_{N-1})
+    final_boundary = sum(qpu_sizes)
+    final_line_y = (num_qubits_phys - final_boundary + 0.5) * yscale
+    ax.text((depth + 1.5) * xscale, final_line_y + 0.5 * yscale, f"$Q_{{{len(qpu_sizes)-1}}}$", fontsize=18, ha='left', va='bottom', color=boundary_color, zorder=20)
 
-def draw_graph_mpl(H, assignment, qpu_info):
-    fig, ax = hypergraph_to_matplotlib(
-        H,
-        assignment,
-        qpu_info,
-        figsize=(10, 6),
-        save=False,
-        path=None,
-        ax=None
-    )
+    ax.set_aspect('equal')
+    ax.axis('off')
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=dpi)
+    if ax is None:
+        plt.show()
+    return ax

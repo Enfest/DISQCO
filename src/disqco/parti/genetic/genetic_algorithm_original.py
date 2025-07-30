@@ -31,7 +31,7 @@ class Genetic_Partitioning():
             self.layers = circuit_to_gate_layers(self.circuit) # List of all operations in layers
             self.layers = layer_list_to_dict(self.layers) # Convert to dictionary
             if gate_packing: # Pre process the gates to group distributable packets
-                self.layers = group_distributable_packets(self.layers,self.num_qubits_log)
+                self.layers = group_distributable_packets_asym(self.layers,self.num_qubits_log)
             self.layers = list(self.layers.values())
         else:
             self.layers = layers
@@ -134,7 +134,8 @@ class Genetic_Partitioning():
             max_over_time.append(population[0][1])
         pool.close()
         pool.join()
-        return population,max_over_time
+        results = {'population': population, 'max_over_time': max_over_time, 'best_cost': population[0][1], 'best_assignment': population[0][0]}
+        return results
 
     def view_graphs(self,partition):
         initial_graph = circuit_to_graph(self.qpu_info,self.circuit,group_gates=self.gate_packing)

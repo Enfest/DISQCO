@@ -1,7 +1,6 @@
 from qiskit import QuantumCircuit
 from disqco.graphs.quantum_network import QuantumNetwork
 import numpy as np
-from disqco.parti.FM.FM_methods import set_initial_partitions
 
 # Circuit partitioner base class
 
@@ -9,7 +8,8 @@ class QuantumCircuitPartitioner:
     """
     Base class for quantum circuit partitioners.
     """
-    def __init__(self, circuit : QuantumCircuit | None = None, 
+    def __init__(self, 
+                 circuit : QuantumCircuit | None = None, 
                  network: QuantumNetwork | None = None, 
                  initial_assignment: np.ndarray | None = None
                  ) -> None:
@@ -33,15 +33,15 @@ class QuantumCircuitPartitioner:
         """
 
         partitioner = kwargs.get('partitioner')
-        coarsener = kwargs.pop('coarsener', None)
-        if coarsener is not None:
-            results = self.multilevel_partition(coarsener, **kwargs)
+        hypergraph_coarsener = kwargs.pop('hypergraph_coarsener', None)
+        if hypergraph_coarsener is not None:
+            results = self.multilevel_partition(hypergraph_coarsener, **kwargs)
         else:
             results = partitioner(**kwargs)
 
         return results
     
-    def multilevel_partition(self, coarsener, **kwargs) -> list:
+    def multilevel_partition(self, coarsener, **kwargs) -> dict:
         """
         Perform multilevel partitioning of the quantum circuit.
 
@@ -51,10 +51,14 @@ class QuantumCircuitPartitioner:
         Returns:
             A list of partitions.
         """
-        level_limit = kwargs.get('level_limit', 1000)
-        graph = kwargs.get('graph', self.hypergraph)
+        # Extract coarsener-related kwargs
+        coarsener_kwargs = {}
+        for key in list(kwargs.keys()):
+            if key in ['num_levels',  'num_blocks', 'block_size', 'recursion_factor']:
+                coarsener_kwargs[key] = kwargs.pop(key)
 
-        graph_list, mapping_list = coarsener(hypergraph=graph)
+        graph = kwargs.get('graph', self.hypergraph)
+        graph_list, mapping_list = coarsener(hypergraph=graph, **coarsener_kwargs)
 
         full_graph = graph_list[0]
 
@@ -62,7 +66,7 @@ class QuantumCircuitPartitioner:
             assignment = self.initial_assignment.copy()
         else:
             assignment = None
-        
+        level_limit = coarsener_kwargs.get('level_limit', 100)
         list_of_assignments = []
         list_of_costs = []
         best_cost = float('inf')
@@ -77,14 +81,13 @@ class QuantumCircuitPartitioner:
 
         for i, graph in enumerate(graph_list):
 
-            self.passes = pass_list[i]
+            self.passes = int(pass_list[i])
             kwargs['graph'] = graph
             kwargs['active_nodes'] = graph.nodes
             kwargs['assignment'] = assignment
             kwargs['mapping'] = mapping_list[i]
             kwargs['limit'] = self.num_qubits
             kwargs['passes'] = pass_list[i]
-            
             results = self.partition(**kwargs)
 
             best_cost_level = results['best_cost']
@@ -113,7 +116,7 @@ class QuantumCircuitPartitioner:
         final_cost = list_of_costs[-1]
         final_assignment = list_of_assignments[-1]
 
-        results = {'best_cost' : final_cost, 'best_assignment' : final_assignment}
+        results = {'best_cost' : final_cost, 'best_assignment' : final_assignment, 'assignment_list': list_of_assignments, 'cost_list': list_of_costs}
 
         return results
 

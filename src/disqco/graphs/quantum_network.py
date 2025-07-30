@@ -4,7 +4,6 @@ from collections import deque
 from networkx.algorithms.approximation import steiner_tree
 from networkx import erdos_renyi_graph
 import math as mt
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
 from disqco.graphs.hypergraph_methods import map_hedge_to_configs, get_all_configs, config_to_cost
 
 # Quantumn Network Class
@@ -13,7 +12,7 @@ from disqco.graphs.hypergraph_methods import map_hedge_to_configs, get_all_confi
 # and to find the minimum spanning tree for a given set of nodes, which
 # is used for finding entanglement distribution paths.
 class QuantumNetwork():
-    def __init__(self, qpu_sizes, qpu_connectivity = None):
+    def __init__(self, qpu_sizes, qpu_connectivity = None, comm_sizes = None):
 
         if isinstance(qpu_sizes, list):
             self.qpu_sizes = {}
@@ -33,6 +32,14 @@ class QuantumNetwork():
         self.num_qpus = len(self.qpu_sizes)
         self.mapping = {i: set([i]) for i in range(self.num_qpus)}
         self.active_nodes = set(self.qpu_sizes.keys())
+
+        if comm_sizes is None:
+            self.comm_sizes = {i: 1 for i in range(self.num_qpus)}
+        else:
+            if isinstance(comm_sizes, list):
+                self.comm_sizes = {i: comm_sizes[i] for i in range(len(comm_sizes))}
+            else:
+                self.comm_sizes = comm_sizes
 
     def create_qpu_graph(self):
         qpu_graph = nx.Graph()
@@ -112,10 +119,52 @@ class QuantumNetwork():
         
         return edges, cost
     
-    def get_full_tree(self, graph : QuantumCircuitHyperGraph, 
-                      edge : tuple[int,int], 
-                      assignment : list[list[int]], 
-                      num_partitions: int) -> nx.Graph:
+    # def get_full_tree(self, graph : QuantumCircuitHyperGraph, 
+    #                   edge : tuple[int,int], 
+    #                   assignment : list[list[int]], 
+    #                   num_partitions: int) -> nx.Graph:
+    #     """
+    #     Get the full tree of edges in network required to cover gates in the edge.
+    #     This is used to find the entanglement distribution paths.
+
+    #     :param graph: The hypergraph representing the quantum circuit.
+    #     :type graph: QuantumCircuitHyperGraph
+    #     :param edge: The edge in the hypergraph representing the gate.
+    #     :type edge: tuple[int,int]
+    #     :param assignment: The assignment of qubits to QPUs.
+    #     :type assignment: list[list[int]]
+    #     :return: A set of edges representing the full tree.
+    #     :rtype: set[tuple[int,int]]
+    #     """
+    #     if edge not in graph.hyperedges:
+    #         edge = (edge[1], edge[0])
+    #         if edge not in graph.hyperedges:
+    #             edge = edge[1]
+    #             if edge not in graph.hyperedges:
+    #                 raise ValueError(f"Edge {edge} not found in hypergraph.")
+    #     root_config, rec_config = map_hedge_to_configs(hypergraph=graph, 
+    #                                                    hedge=edge, 
+    #                                                    assignment=assignment, 
+    #                                                    num_partitions=num_partitions)
+
+    #     root_nodes = [i for i, element in enumerate(root_config) if element == 1]
+    #     rec_nodes = [i for i, element in enumerate(rec_config) if element == 1]
+
+    #     steiner_g = steiner_tree(self.qpu_graph, root_nodes)
+    #     node_set = set(steiner_g.nodes())
+    #     source_nodes = list(node_set.union(root_nodes))
+    #     edges = self.multi_source_bfs(source_nodes, rec_nodes)
+
+    #     all_network_edges = edges.union(steiner_g.edges())
+
+    #     tree = nx.Graph()
+    #     tree.add_edges_from(all_network_edges)
+
+    #     return tree
+
+    def get_full_tree(self, 
+                    root_p : int,
+                    target_partitions : list[int]) -> nx.Graph:
         """
         Get the full tree of edges in network required to cover gates in the edge.
         This is used to find the entanglement distribution paths.
@@ -129,31 +178,11 @@ class QuantumNetwork():
         :return: A set of edges representing the full tree.
         :rtype: set[tuple[int,int]]
         """
-        if edge not in graph.hyperedges:
-            edge = (edge[1], edge[0])
-            if edge not in graph.hyperedges:
-                edge = edge[1]
-                if edge not in graph.hyperedges:
-                    raise ValueError(f"Edge {edge} not found in hypergraph.")
-        root_config, rec_config = map_hedge_to_configs(hypergraph=graph, 
-                                                       hedge=edge, 
-                                                       assignment=assignment, 
-                                                       num_partitions=num_partitions)
 
-        root_nodes = [i for i, element in enumerate(root_config) if element == 1]
-        rec_nodes = [i for i, element in enumerate(rec_config) if element == 1]
+        terminal_nodes = [root_p] + target_partitions
 
-        steiner_g = steiner_tree(self.qpu_graph, root_nodes)
-        node_set = set(steiner_g.nodes())
-        source_nodes = list(node_set.union(root_nodes))
-        edges = self.multi_source_bfs(source_nodes, rec_nodes)
+        return steiner_tree(G=self.qpu_graph, terminal_nodes=terminal_nodes)
 
-        all_network_edges = edges.union(steiner_g.edges())
-
-        tree = nx.Graph()
-        tree.add_edges_from(all_network_edges)
-
-        return tree
 
     def copy(self):
         return QuantumNetwork(self.qpu_sizes, self.qpu_connectivity)

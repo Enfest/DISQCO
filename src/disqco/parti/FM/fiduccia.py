@@ -2,9 +2,8 @@ from disqco.parti.partitioner import QuantumCircuitPartitioner
 from qiskit import QuantumCircuit
 from disqco.graphs.quantum_network import QuantumNetwork
 import numpy as np
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
+from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 from disqco.parti.FM.FM_methods import *
-from disqco.parti.FM.FM_hetero import run_FM_sparse, FM_pass_sparse
 import networkx as nx
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 
@@ -66,7 +65,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
 
         if self.initial_assignment is None:
-            self.initial_assignment = set_initial_partitions(network, self.num_qubits, self.depth)
+            self.initial_assignment = set_initial_partition_assignment(graph=self.hypergraph, network=network)
 
     def FM_pass(self, hypergraph, assignment, **kwargs):
 
@@ -145,34 +144,13 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
         hypergraph = kwargs.pop('graph')
         assignment = kwargs.pop('assignment')
+        
 
         mapping = kwargs.pop('mapping', {t : set([t]) for t in range(hypergraph.depth)})
+        self.max_gain = kwargs.pop('max_gain', self.find_max_gain(mapping))
 
         dummy_nodes = self.dummy_nodes
-
-        # if self.sparse:
-        #     # Run sparse FM
-        #     # print("Running sparse FM")
-        #     final_cost, final_assignment, _ = run_FM_sparse(
-        #         hypergraph=hypergraph,
-        #         initial_assignment=assignment,
-        #         qpu_info=self.qpu_sizes,
-        #         num_partitions=self.num_partitions,
-        #         active_nodes=self.network.active_nodes,
-        #         limit=hypergraph.num_qubits_init,
-        #         max_gain=4*hypergraph.depth,
-        #         passes=10,
-        #         stochastic=True,
-        #         log=False,
-        #         network=self.network,
-        #         node_map=self.node_map,
-        #         dummy_nodes=dummy_nodes
-        #     )
-
-            # results = {'best_cost': final_cost, 'best_assignment': final_assignment}
-            # return results
         log = kwargs.get('log', False)
-
 
         initial_cost = calculate_full_cost(hypergraph, 
                                            assignment, 
@@ -191,8 +169,6 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
 
         cost_list.append(cost)
         best_assignments.append(assignment)
-        # print("Starting FM passes...")
-        self.max_gain = self.find_max_gain(mapping)
 
         for n in range(passes):
             assignment_list, gain_list = self.FM_pass(hypergraph, assignment, **kwargs)
@@ -227,7 +203,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
             print("All passes complete.")
             print("Final cost:", final_cost)
 
-        results = {'best_cost' : final_cost, 'best_assignment' : final_assignment, 'cost_list' : cost_list}
+        results = {'best_cost' : final_cost, 'best_assignment' : final_assignment, 'cost_list' : cost_list, 'assignment_list' : best_assignments}
         
         return results
     
@@ -245,8 +221,9 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
     def multilevel_partition(self, coarsener=None, **kwargs):
 
         kwargs['graph'] = self.hypergraph
-        coarsener = kwargs.pop('coarsener', None)
         sparse = kwargs.get('sparse', False)
+        if coarsener is None:
+            coarsener = kwargs.pop('coarsener', None)
 
         if coarsener is None:
             coarsener_class = HypergraphCoarsener()
@@ -258,6 +235,7 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
         return super().multilevel_partition(coarsener=coarsener, **kwargs)
 
     def find_max_gain(self, mapping=None):
+        
         if mapping is None:
             base = 4
         else:

@@ -1,6 +1,6 @@
 import numpy as np
 from disqco.graphs.quantum_network import QuantumNetwork
-from disqco.graphs.GCP_hypergraph_extended import HyperGraph, HyperEdge
+from disqco.graphs.QC_hypergraph_extended import HyperGraph, HyperEdge
 import copy
 import heapq
 

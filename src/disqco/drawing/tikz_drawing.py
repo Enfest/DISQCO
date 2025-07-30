@@ -1,14 +1,15 @@
 from __future__ import annotations
-from disqco.drawing.map_positions import space_mapping, get_pos_list, get_pos_list_ext, space_mapping_enhanced, get_pos_list_enhanced, get_pos_list_subgraph, find_node_layout, find_node_layout_sparse
-from typing import Dict, Tuple, Iterable, Hashable, Union, List
+from disqco.drawing.map_positions import space_mapping, get_pos_list, get_pos_list_ext, find_node_layout_sparse
+from typing import Dict, Iterable, Union
+from disqco.graphs.quantum_network import QuantumNetwork
 try:
     from IPython.core.getipython import get_ipython
 except ImportError:
     get_ipython = lambda: None
 import numpy as np
-from disqco.graphs.GCP_hypergraph_extended import HyperGraph
+from disqco.graphs.QC_hypergraph_extended import HyperGraph
+from disqco.parti.FM.FM_methods import set_initial_partition_assignment
 # 
-
 
 def hypergraph_to_tikz(
     H,
@@ -23,7 +24,7 @@ def hypergraph_to_tikz(
     assignment_map= None,
     show_labels=True,
     remove_intermediate_roots=False,
-    node_map = None,
+    network=None
 ):
     """
     Convert a QuantumCircuitHyperGraph 'H' into a full standalone TikZ/LaTeX document,
@@ -54,6 +55,9 @@ def hypergraph_to_tikz(
     node_scale = min(0.6, max(0.3, 1.0 / (max(depth, num_qubits) ** 0.5)))
     small_node_scale = node_scale * 0.5
     gate_node_scale = node_scale * 1.2
+
+    # Global x offset to shift the entire drawing to the right
+    x_offset = 2.0
 
     # Build the position map for real (qubit,time) nodes
     space_map = space_mapping(qpu_sizes, depth)
@@ -141,7 +145,7 @@ def hypergraph_to_tikz(
             _, p, pprime = node
             # Example: place them in a single row at y = num_qubits_phys+2
             # and x offset = partition p + some shift
-            x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2  # scale horizontally by pprime
+            x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2 + x_offset  # scale horizontally by pprime
             y = (-2) * yscale * 0.8
             return (x, y)
         # else:
@@ -162,7 +166,7 @@ def hypergraph_to_tikz(
             else:
                 q, t = node
             # These must exist in pos_list
-            x = t * xscale
+            x = t * xscale + x_offset
 
 
   
@@ -202,7 +206,12 @@ def hypergraph_to_tikz(
     tikz_code.append(rf"  \tikzset{{boundaryLine/.style={{draw={boundary_color}, dashed}}}}")
 
     # Add this after the other style definitions
-    tikz_code.append(r"  \tikzset{nodeLabel/.style={scale=0.5, inner sep=0pt}}")
+    # Auto-scale node label size based on circuit size
+    label_scale = min(0.5, max(0.2, 1.0 / (max(depth, num_qubits) ** 0.4)))
+    tikz_code.append(fr"  \tikzset{{nodeLabel/.style={{scale={label_scale:.3f}, inner sep=0pt}}}}")
+    # Separate style for starting q_i labels (make them bigger)
+    start_label_scale = min(1.0, max(0.5, 2.0 * label_scale))
+    tikz_code.append(fr"  \tikzset{{startQLabel/.style={{scale={start_label_scale:.3f}, inner sep=0pt}}}}")
 
     # --------------- NODES ---------------
     tikz_code.append(r"  \begin{pgfonlayer}{nodelayer}")
@@ -340,15 +349,15 @@ def hypergraph_to_tikz(
 
     for qubit in range(num_qubits):
         
-        left_x = buffer_left_time * xscale
+        left_x = buffer_left_time * xscale + x_offset
         left_y = (num_qubits_phys - pos_list[0][qubit]) * yscale
         left_node_name = f"bufL_{qubit}"
         tikz_code.append(
-            f"    \\node [style=whiteSmallStyle, label={{[nodeLabel]left:$q_{{{qubit}}}$}}] ({left_node_name}) "
+            f"    \\node [style=whiteSmallStyle, label={{[startQLabel]left:$q_{{{qubit}}}$}}] ({left_node_name}) "
             f"at ({left_x:.3f},{left_y:.3f}) {{}};"
         )
 
-        right_x = buffer_right_time * xscale
+        right_x = buffer_right_time * xscale + x_offset
         right_y = (num_qubits_phys - pos_list[max_time][qubit]) * yscale
         right_node_name = f"bufR_{qubit}"
         tikz_code.append(
@@ -382,15 +391,59 @@ def hypergraph_to_tikz(
 
     # --------------- PARTITION BOUNDARY LINES ---------------
     tikz_code.append(r"  \begin{pgfonlayer}{edgelayer}")
+    draw_qpu_labels = not (network is not None and hasattr(network, 'qpu_graph'))
     for i in range(1, len(qpu_sizes)):
         boundary = sum(qpu_sizes[:i])
         line_y = (num_qubits_phys - boundary + 0.5) * yscale
-        left_x = -1.5 * xscale
-        right_x = (max_time + 1.5) * xscale
+        left_x = -1.5 * xscale + x_offset
+        right_x = (max_time + 1.5) * xscale + x_offset
         tikz_code.append(
             f"    \\draw[style=boundaryLine] ({left_x:.3f},{line_y:.3f}) -- ({right_x:.3f},{line_y:.3f});"
         )
+        if draw_qpu_labels:
+            tikz_code.append(
+                f"    \\node[anchor=west, scale=1.0] at ({right_x - 0.5 * xscale:.3f},{line_y + 1.0 * yscale:.3f}) {{$Q_{{{i-1}}}$}};"
+            )
+    if draw_qpu_labels:
+        final_boundary = sum(qpu_sizes)
+        final_line_y = (num_qubits_phys - final_boundary + 0.5) * yscale
+        right_x = (max_time + 1.5) * xscale + x_offset
+        tikz_code.append(
+            f"    \\node[anchor=west, scale=1.0] at ({right_x - 0.5 * xscale:.3f},{final_line_y + 1.0 * yscale:.3f}) {{$Q_{{{len(qpu_sizes)-1}}}$}};"
+        )
     tikz_code.append(r"  \end{pgfonlayer}")
+
+    # Draw mini QPU network graph to the right of QPU labels
+    if network is not None and hasattr(network, 'qpu_graph'):
+        qpu_graph = network.qpu_graph
+        qpu_count = len(qpu_sizes)
+        # x position for QPU nodes (to the right of QPU labels)
+        qpu_x = right_x + 1.5 * xscale  
+        # y positions: center of each QPU region
+        qpu_y = []
+        prev_boundary = 0
+        for i in range(qpu_count):
+            next_boundary = sum(qpu_sizes[:i+1]) if i < qpu_count-1 else num_qubits_phys
+            # Center between prev_boundary and next_boundary
+            y = (num_qubits_phys - (prev_boundary + next_boundary)/2) * yscale
+            qpu_y.append(y)
+            prev_boundary = next_boundary
+        # Draw QPU nodes
+        # Custom QPU node scaling based only on num_qubits
+        qpu_node_scale = min(2.0, max(0.5, 10.0 / num_qubits))
+        qpu_label_scale = qpu_node_scale
+        # Shift QPU network further to the right
+        qpu_x = right_x + 3.0 * xscale
+        for i in range(qpu_count):
+            tikz_code.append(
+                f"    \\node[draw=black, fill=blue!40, circle, minimum size={qpu_node_scale:.2f}cm, thick] (QPU{i}) at ({qpu_x:.3f},{qpu_y[i]:.3f}) {{\\scalebox{{{qpu_label_scale:.2f}}}{{$Q_{{{i}}}$}}}};"
+            )
+        # Draw edges with alternating bends
+        for j, (src, tgt) in enumerate(qpu_graph.edges()):
+            bend = 25 if j % 2 == 0 else -25
+            tikz_code.append(
+                f"    \\draw[thick, black, bend left={bend}] (QPU{src}) to (QPU{tgt});"
+            )
 
     tikz_code.append(r"\end{tikzpicture}")
     tikz_code.append(r"\end{document}")
@@ -402,38 +455,41 @@ def hypergraph_to_tikz(
 
     return final_code
 
-def draw_graph_tikz(H, assignment, qpu_info, invert_colors=False, fill_background=True, assignment_map=None, show_labels=True,
-        tikz_raw = False, remove_intermediate_roots=False):
+def draw_graph_tikz(hypergraph, network = None, assignment = None, invert_colors=False, fill_background=True, assignment_map=None, show_labels=True,
+        tikz_raw = False, remove_intermediate_roots=False, dpi=300):
     """
     Jupyter convenience function to compile & display the TikZ code inline.
     """
+
+    if network is not None:
+        qpu_sizes = network.qpu_sizes
+    else:
+        qpu_sizes = {0 : hypergraph.num_qubits}
+        network = QuantumNetwork(qpu_sizes)
+    
+    if assignment is None:
+        assignment = set_initial_partition_assignment(hypergraph, network)
+
+    
     tikz_code = hypergraph_to_tikz(
-        H,
-        assignment,
-        qpu_info,
+        H=hypergraph,
+        assignment=assignment,
+        qpu_info=qpu_sizes,
         save=False,
         invert_colors=invert_colors,
         fill_background=fill_background,
         assignment_map=assignment_map,
         show_labels=show_labels,
-        remove_intermediate_roots=remove_intermediate_roots
+        remove_intermediate_roots=remove_intermediate_roots,
+        network=network
     )
     if tikz_raw:
         return tikz_code
     ip = get_ipython()
-    args = "-f -r --dpi=150"
+    args = f"-f -r --dpi={dpi}"
     return ip.run_cell_magic('tikz', args, tikz_code)
 
 
-# ---------------------------------------------------------------------------
-# hypergraph_drawing_v2.py  ––  TikZ exporter for the *new* bipartite
-# HyperGraph, **with partition‑aware placement** (uses `assignment`).
-# ---------------------------------------------------------------------------
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# 1.  Basic helpers
-# ────────────────────────────────────────────────────────────────────────────
 def hypergraph_to_tikz_v2(
     H : HyperGraph,
     qubit_assignment,
@@ -478,6 +534,8 @@ def hypergraph_to_tikz_v2(
     small_node_scale = node_scale * 0.5
     gate_node_scale = node_scale * 1.2
 
+    # Global x offset to shift the entire drawing to the right
+    x_offset = 2.0
 
     # Build the position map for real (qubit,time) nodes
     space_map = space_mapping(qpu_sizes, depth)
@@ -556,7 +614,7 @@ def hypergraph_to_tikz_v2(
             # Example: place them in a single row at y = num_qubits_phys+2
             # and x offset = partition p + some shift
             print(f"Dummy node: {node}")
-            x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2  # scale horizontally by pprime
+            x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2 + x_offset  # scale horizontally by pprime
             y = (-2) * yscale * 0.8
             print(f"Dummy node position: (x={x}, y={y})")
             return (x, y)
@@ -572,7 +630,7 @@ def hypergraph_to_tikz_v2(
             else:
                 q, t = node
             # These must exist in pos_list
-            x = t * xscale
+            x = t * xscale + x_offset
 
 
   
@@ -582,7 +640,7 @@ def hypergraph_to_tikz_v2(
         
         if isinstance(node, tuple) and len(node) == 3 and node[0] != "dummy":
             # This is a gate node
-            x = (node[-1]) * xscale
+            x = (node[-1]) * xscale + x_offset
             # Define height as half way between qubit from node[0] and node[1]
 
             partner1 = (node[0], node[2])
@@ -759,12 +817,12 @@ def hypergraph_to_tikz_v2(
                     else:
                         y_buffer = sum(qpu_sizes[:node_assignment])
                     
-                    x = node[-1] * xscale
+                    x = node[-1] * xscale + x_offset
                     y = gate_node_positions[node][1]
                     gate_nodes.append((node, y))
 
             # Calculate central vertex position
-            central_vertex_x = (min_time + (max_time - min_time)/2) * xscale
+            central_vertex_x = (min_time + (max_time - min_time)/2) * xscale + x_offset
             
             # First calculate the average y-position of all gate nodes
             if gate_nodes:
@@ -810,7 +868,7 @@ def hypergraph_to_tikz_v2(
     tikz_code.append(r"  \begin{pgfonlayer}{nodelayer}")
 
     for qubit in range(num_qubits):
-        left_x = buffer_left_time * xscale
+        left_x = buffer_left_time * xscale + x_offset
         left_y = (num_qubits_phys - pos_list[0][qubit]) * yscale
         left_node_name = f"bufL_{qubit}"
         tikz_code.append(
@@ -818,7 +876,7 @@ def hypergraph_to_tikz_v2(
             f"at ({left_x:.3f},{left_y:.3f}) {{}};"
         )
 
-        right_x = buffer_right_time * xscale
+        right_x = buffer_right_time * xscale + x_offset
         right_y = (num_qubits_phys - pos_list[max_time][qubit]) * yscale
         right_node_name = f"bufR_{qubit}"
         tikz_code.append(
@@ -845,13 +903,24 @@ def hypergraph_to_tikz_v2(
     # --------------- PARTITION BOUNDARY LINES ---------------
     tikz_code.append(r"  \begin{pgfonlayer}{edgelayer}")
     for i in range(1, len(qpu_sizes)):
-        boundary = sum(qpu_sizes[:i])
+        boundary = sum(qpu_sizes[:i])+1
         line_y = (num_qubits_phys - boundary + 0.5) * yscale
-        left_x = -1.5 * xscale
-        right_x = (max_time + 1.5) * xscale
+        left_x = (min_time - 1.5) * xscale + x_offset
+        right_x = (max_time + 2) * xscale + x_offset
         tikz_code.append(
             f"    \\draw[style=boundaryLine] ({left_x:.3f},{line_y:.3f}) -- ({right_x:.3f},{line_y:.3f});"
         )
+        # Add Q_i label above the boundary line on the far right, starting from Q_0
+        tikz_code.append(
+            f"    \\node[anchor=west, scale=1.0] at ({right_x - 0.5 * xscale:.3f},{line_y + 1.0 * yscale:.3f}) {{$Q_{{{i-1}}}$}};"
+        )
+    # Add a final QPU label for the last partition (Q_{N-1})
+    final_boundary = sum(qpu_sizes)+1
+    final_line_y = (num_qubits_phys - final_boundary + 0.5) * yscale
+    right_x = (max_time + 2) * xscale + x_offset
+    tikz_code.append(
+        f"    \\node[anchor=west, scale=1.0] at ({right_x - 0.5 * xscale:.3f},{final_line_y + 1.0 * yscale:.3f}) {{$Q_{{{len(qpu_sizes)-1}}}$}};"
+    )
     tikz_code.append(r"  \end{pgfonlayer}")
 
     tikz_code.append(r"\end{tikzpicture}")
@@ -863,11 +932,6 @@ def hypergraph_to_tikz_v2(
             f.write(final_code)
 
     return final_code
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# 3.  Notebook convenience wrapper
-# ────────────────────────────────────────────────────────────────────────────
 
 def draw_graph_tikz_v2(
     H: "HyperGraph",
@@ -882,13 +946,14 @@ def draw_graph_tikz_v2(
     """Compile & render the TikZ code inline in a Jupyter notebook."""
     code = hypergraph_to_tikz_v2(H, qubit_assignment, gate_assignment, qpu_info, depth=depth, num_qubits=num_qubits, show_labels=show_labels, **kwargs)
     ip = get_ipython()
-    return ip.run_cell_magic("tikz", "-f -r --dpi=150", code)
+    return ip.run_cell_magic("tikz", "-f -r --dpi=400", code)
 
 
 def hypergraph_to_tikz_subgraph(
     H,
     assignment,
     qpu_info,
+    network=None,
     node_map=None,
     xscale=None,
     yscale=None,
@@ -934,6 +999,9 @@ def hypergraph_to_tikz_subgraph(
     node_scale = min(0.6, max(0.3, 1.0 / (max(depth, num_qubits) ** 0.5)))
     small_node_scale = node_scale * 0.5
     dummy_node_scale = node_scale * 2.0  # Double the size of other nodes for dummy nodes
+
+    # Global x offset to shift the entire drawing to the right
+    x_offset = 2.0
 
     # Build the position map for real (qubit,time) nodes using original mapping
     # Temporarily using original mapping to debug positioning issues
@@ -1020,7 +1088,7 @@ def hypergraph_to_tikz_subgraph(
             partition = node[2]
             
 
-            x = (max_time + 2.0) * xscale  # Further right
+            x = (max_time + 2.0) * xscale + x_offset  # Further right
             
             # Vertical position based on partition, with good separation
             base_y = node_map[partition]   # More space between partitions
@@ -1038,13 +1106,13 @@ def hypergraph_to_tikz_subgraph(
             
             # Ensure we have valid indices
             if (q,t) in pos_list:
-                x = t * xscale
+                x = t * xscale + x_offset
 
                 y = (num_qubits_phys - pos_list[(q,t)]) * yscale
                 return (x, y)
             else:
                 # Fallback positioning if pos_list doesn't have the position
-                x = t * xscale
+                x = t * xscale + x_offset
                 y = (num_qubits_phys - q) * yscale  # Use qubit index directly
                 return (x, y)
 
@@ -1067,7 +1135,9 @@ def hypergraph_to_tikz_subgraph(
                 else:
                     print(f"WARNING: Invalid part in dummy node: {part}")
                     name_parts.append("invalid")
-            return "n_" + "_".join(name_parts)
+
+            # return "n_" + "_".join(name_parts)
+            return f"QPU{n[2]}"
         
         # Regular node handling
         try:
@@ -1098,6 +1168,82 @@ def hypergraph_to_tikz_subgraph(
     tikz_code.append(r"  \tikzset{edgeStyle/.style={draw=" + edge_color + "}}")
     tikz_code.append(r"  \tikzset{boundaryLine/.style={draw=" + boundary_color + ", dashed}}")
     tikz_code.append(r"  \tikzset{nodeLabel/.style={scale=0.4, inner sep=1pt}}")  # Smaller labels to reduce overlap
+    tikz_code.append(r"  \begin{pgfonlayer}{edgelayer}")
+
+    draw_qpu_labels = not (network is not None and hasattr(network, 'qpu_graph'))
+    for i in range(1, len(qpu_sizes)):
+        boundary = sum(qpu_sizes[:i])+1
+        line_y = (num_qubits_phys - boundary + 0.5) * yscale
+        left_x = (min_time - 1.5) * xscale + x_offset
+        right_x = (max_time + 2) * xscale + x_offset
+        tikz_code.append(
+            f"    \\draw[style=boundaryLine] ({left_x:.3f},{line_y:.3f}) -- ({right_x:.3f},{line_y:.3f});"
+        )
+        if draw_qpu_labels:
+            tikz_code.append(
+                f"    \\node[anchor=west, scale=1.0] at ({right_x - 0.5 * xscale:.3f},{line_y + 1.0 * yscale:.3f}) {{$Q_{{{i-1}}}$}};"
+            )
+    if draw_qpu_labels:
+        final_boundary = sum(qpu_sizes)+1
+        final_line_y = (num_qubits_phys - final_boundary + 0.5) * yscale
+        right_x = (max_time + 2) * xscale + x_offset
+        tikz_code.append(
+            f"    \\node[anchor=west, scale=1.0] at ({right_x - 0.5 * xscale:.3f},{final_line_y + 1.0 * yscale:.3f}) {{$Q_{{{len(qpu_sizes)-1}}}$}};"
+        )
+    tikz_code.append(r"  \end{pgfonlayer}")
+
+    # Draw mini QPU network graph to the right of QPU labels
+    if network is not None and hasattr(network, 'qpu_graph'):
+        qpu_graph = network.qpu_graph
+        qpu_count = len(network.qpu_graph.nodes)
+
+        active_qpu_node_count = len(network.active_nodes)
+        # x position for QPU nodes (to the right of QPU labels)
+        qpu_x = right_x + 1.5 * xscale  
+        # y positions: center of each QPU region
+        qpu_y = {}
+        prev_boundary = 0
+        for node in network.active_nodes:
+            i = node_map[node] if node_map is not None else node
+            next_boundary = sum(qpu_sizes[:i+1]) if i < qpu_count-1 else num_qubits_phys
+            # Center between prev_boundary and next_boundary
+            y = (num_qubits_phys - (prev_boundary + next_boundary)/2) * yscale
+            qpu_y[node] = y
+            prev_boundary = next_boundary
+        
+        for node in network.qpu_graph.nodes:
+            if node not in network.active_nodes:
+                i = node_map[node] if node_map is not None else node
+
+                if node > max(network.active_nodes):
+                    y = - num_qubits_phys / len(network.active_nodes) * yscale
+                elif node < min(network.active_nodes):
+                    y = (num_qubits_phys + num_qubits_phys / len(network.active_nodes)) * yscale
+
+                qpu_y[node] = y
+
+        # Draw QPU nodes
+        # Custom QPU node scaling based only on num_qubits
+        qpu_node_scale = min(2.0, max(0.5, 10.0 / num_qubits))
+        qpu_label_scale = qpu_node_scale
+        # Shift QPU network further to the right
+        qpu_x = right_x + 3.0 * xscale
+        for node in network.qpu_graph.nodes:
+            if node not in network.active_nodes:
+                color = "lightgray"
+            else:
+                color = "blue"
+
+            i = node_map[node] if node_map is not None else node
+            tikz_code.append(
+                f"    \\node[draw=black, fill={color}!40, circle, minimum size={qpu_node_scale:.2f}cm, thick] (QPU{node}) at ({qpu_x:.3f},{qpu_y[node]:.3f}) {{\\scalebox{{{qpu_label_scale:.2f}}}{{$Q_{{{node}}}$}}}};"
+            )
+        # Draw edges with alternating bends
+        for j, (src, tgt) in enumerate(qpu_graph.edges()):
+            bend = 25 if j % 2 == 0 else -25
+            tikz_code.append(
+                f"    \\draw[thick, black, bend left={bend}] (QPU{src}) to (QPU{tgt});"
+            )
 
     # Draw nodes
     tikz_code.append(r"  \begin{pgfonlayer}{nodelayer}")
@@ -1109,10 +1255,12 @@ def hypergraph_to_tikz_subgraph(
         
         if show_labels:
             if is_dummy:
-                label = f"QPU {n[2]}"  # Use partition info for dummy nodes
-            else:
-                q, t = n
-                label = f"$({q},{t})$"
+                # label = f"QPU{n[2]}"  # Use partition info for dummy nodes
+                continue
+
+            q, t = n
+            label = f"$({q},{t})$"
+
             tikz_code.append(
                 f"    \\node [style={style}, label={{[nodeLabel]above:{label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
             )
@@ -1351,18 +1499,79 @@ def hypergraph_to_tikz_subgraph(
 
     tikz_code.append(r"  \end{pgfonlayer}")
 
-    # Add boundary lines between partitions (if applicable)
-    tikz_code.append(r"  \begin{pgfonlayer}{edgelayer}")
+    # --------------- BUFFER LAYER ---------------
+    tikz_code.append(r"  %--------------- BUFFER LAYER ---------------")
+    tikz_code.append(r"  % White boundary nodes at t=min_time-1 and t=max_time+1 for each qubit.")
+    buffer_left_time = min_time - 1
+    buffer_right_time = max_time + 1
 
-    for i in range(1, len(qpu_sizes)):
-        boundary = sum(qpu_sizes[:i])+1
-        line_y = (num_qubits_phys - boundary + 0.5) * yscale
-        left_x = (min_time - 1.5) * xscale
-        right_x = (max_time + 2) * xscale
-        tikz_code.append(
-            f"    \\draw[style=boundaryLine] ({left_x:.3f},{line_y:.3f}) -- ({right_x:.3f},{line_y:.3f});"
-        )
+    tikz_code.append(r"  \begin{pgfonlayer}{nodelayer}")
+    
+    # Get all qubits that appear in the subgraph
+    subgraph_qubits = set()
+    for n in H.nodes:
+        if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy":
+            subgraph_qubits.add(n[0])
+    
+    # Track which qubits actually exist at boundary time steps
+    qubits_at_min_time = set()
+    qubits_at_max_time = set()
+    
+    for n in H.nodes:
+        if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy":
+            q, t = n
+            if t == min_time:
+                qubits_at_min_time.add(q)
+            if t == max_time:
+                qubits_at_max_time.add(q)
+    
+    for qubit in sorted(subgraph_qubits):
+        # Left boundary node - only if qubit exists at min_time
+        if qubit in qubits_at_min_time:
+            left_x = buffer_left_time * xscale + x_offset
+            if (qubit, min_time) in pos_list:
+                left_y = (num_qubits_phys - pos_list[(qubit, min_time)]) * yscale
+            else:
+                # Fallback positioning
+                left_y = (num_qubits_phys - qubit) * yscale
+            left_node_name = f"bufL_{qubit}"
+            tikz_code.append(
+                f"    \\node [style=whiteSmallStyle, label={{[nodeLabel]left:$q_{{{qubit}}}$}}] ({left_node_name}) "
+                f"at ({left_x:.3f},{left_y:.3f}) {{}};"
+            )
+
+        # Right boundary node - only if qubit exists at max_time
+        if qubit in qubits_at_max_time:
+            right_x = buffer_right_time * xscale + x_offset
+            if (qubit, max_time) in pos_list:
+                right_y = (num_qubits_phys - pos_list[(qubit, max_time)]) * yscale
+            else:
+                # Fallback positioning
+                right_y = (num_qubits_phys - qubit) * yscale
+            right_node_name = f"bufR_{qubit}"
+            tikz_code.append(
+                f"    \\node [style=whiteSmallStyle] ({right_node_name}) "
+                f"at ({right_x:.3f},{right_y:.3f}) {{}};"
+            )
     tikz_code.append(r"  \end{pgfonlayer}")
+        
+    # Connect boundary nodes to circuit nodes
+    tikz_code.append(r"  \begin{pgfonlayer}{edgelayer}")
+    for qubit in sorted(subgraph_qubits):
+        # Connect left boundary to first node if both exist
+        if qubit in qubits_at_min_time and (qubit, min_time) in H.nodes:
+            tikz_code.append(
+                f"    \\draw [style=edgeStyle] (bufL_{qubit}) to ({node_name((qubit, min_time))});"
+            )
+        # Connect right boundary to last node if both exist
+        if qubit in qubits_at_max_time and (qubit, max_time) in H.nodes:
+            tikz_code.append(
+                f"    \\draw [style=edgeStyle] (bufR_{qubit}) to ({node_name((qubit, max_time))});"
+            )
+    tikz_code.append(r"  \end{pgfonlayer}")
+
+    # Add boundary lines between partitions (if applicable)
+    
 
     tikz_code.append(r"\end{tikzpicture}")
     tikz_code.append(r"\end{document}")
@@ -1374,17 +1583,18 @@ def hypergraph_to_tikz_subgraph(
 
     return final_code
 
-
 def draw_subgraph_tikz(
     H, 
     assignment, 
     qpu_info, 
+    network=None,
     node_map=None,
     invert_colors=False, 
     fill_background=True, 
     show_labels=True,
     tikz_raw=False, 
-    remove_intermediate_roots=False
+    remove_intermediate_roots=False,
+    dpi=300
 ):
     """
     Jupyter convenience function to compile & display the subgraph TikZ code inline.
@@ -1405,6 +1615,7 @@ def draw_subgraph_tikz(
         H,
         assignment,
         qpu_info,
+        network=network,
         node_map=node_map,
         save=False,
         invert_colors=invert_colors,
@@ -1418,7 +1629,7 @@ def draw_subgraph_tikz(
         
     ip = get_ipython()
     if ip is not None:
-        args = "-f -r --dpi=150"
+        args = f"-f -r --dpi={dpi}"
         return ip.run_cell_magic('tikz', args, tikz_code)
     else:
         # Return the code if not in a Jupyter environment

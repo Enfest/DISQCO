@@ -3,17 +3,18 @@ import random
 import numpy as np
 from disqco.graphs.hypergraph_methods import *
 from disqco.graphs.quantum_network import QuantumNetwork
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
+from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 import time
 
-def set_initial_partitions(network : QuantumNetwork, 
-                           num_qubits: int, 
-                           depth: int, 
-                           invert=False, 
-                           randomise_static=False, 
-                           randomise_full=False, 
-                           node_map=None,
-                           round_robin=False) -> np.ndarray:
+def set_initial_partition_assignment(graph : QuantumCircuitHyperGraph,
+                                    network : QuantumNetwork, 
+                                    invert=False, 
+                                    randomise_static=False, 
+                                    randomise_full=False, 
+                                    node_map=None,
+                                    round_robin=False) -> np.ndarray:
+    num_qubits = graph.num_qubits
+    depth = graph.depth
     static_partition = []
     qpu_info = network.qpu_sizes
     num_partitions = len(qpu_info)
@@ -487,157 +488,6 @@ def update_full_config(source,
         new_full_config[destination] = 0
     return new_full_config
 
-def take_action_and_update_old(hypergraph,
-                               node,
-                               destination,
-                               array,
-                               buckets,
-                               num_partitions,
-                               lock_dict,
-                               assignment,
-                               costs):
-    assignment_new = move_node(node,destination,assignment)
-    delta_gains = {}
-    for edge in hypergraph.node2hyperedges[node]:
-        
-        info = hypergraph.hyperedge_attrs[edge]
-        root_set = hypergraph.hyperedges[edge]['root_set']
-        rec_set = hypergraph.hyperedges[edge]['receiver_set']
-        # print("Info", info)
-        cost = info['cost']
-        cost_new = hedge_to_cost(hypergraph,edge,assignment_new,num_partitions,costs)
-        
-        root_counts = info['root_counts']
-        rec_counts = info['rec_counts']
-        if node in root_set:
-            root_counts_new, source = update_counts(root_counts,node,destination,assignment)
-            root_config_new = update_config(info['root_config'],root_counts_new,source,destination)
-            rec_counts_new = tuple(copy.deepcopy(list(rec_counts)))
-            rec_config_new = tuple(copy.deepcopy(list(info['rec_config'])))
-        elif node in rec_set:
-            rec_counts_new, source = update_counts(rec_counts,node,destination,assignment)
-            rec_config_new = update_config(info['rec_config'],rec_counts_new,source,destination)
-            root_counts_new = tuple(copy.deepcopy(list(root_counts)))
-            root_config_new = tuple(copy.deepcopy(list(info['root_config'])))
-        
-        conf = info['config']
-        # cost = costs[conf]
-        cost = get_cost(conf,costs)
-        conf_a = get_full_config(root_config_new,rec_config_new)
-        cost_a = cost_new
-        root_counts_pre = root_counts
-        rec_counts_pre = rec_counts
-        
-        root_config = info['root_config']
-        rec_config = info['rec_config']
-
-        root_counts_a = root_counts_new
-        root_config_a = root_config_new
-        rec_counts_a = rec_counts_new
-        rec_config_a = rec_config_new
-
-        for next_root_node in root_set:
-            source = assignment[next_root_node[1]][next_root_node[0]] 
-            # source = assignment[next_root_node]
-            if not lock_dict[next_root_node]:
-                for next_destination in range(num_partitions):
-                    if source != next_destination:
-                        next_action = (next_root_node[1], next_root_node[0], next_destination)
-
-                        next_root_counts_b, source1 = update_counts(root_counts_pre, next_root_node, next_destination, assignment)
-                        next_root_config_b = update_config(root_config, next_root_counts_b, source1, next_destination)
-
-                        next_root_counts_ab, source2 = update_counts(root_counts_a, next_root_node, next_destination, assignment_new)
-                        next_root_config_ab = update_config(root_config_a, next_root_counts_ab, source2, next_destination)
-
-                        full_config_b = update_full_config(source1, next_destination, conf, next_root_config_b, rec_config)
-                        full_config_ab = update_full_config(source2, next_destination, conf_a, next_root_config_ab, rec_config_a)
-
-                        # delta_gain = cost_a - cost - costs[full_config_ab] + costs[full_config_b]
-                        delta_gain = cost_a - cost - get_cost(full_config_ab,costs) + get_cost(full_config_b,costs)
-
-                        if next_action in delta_gains:
-                            delta_gains[next_action] += delta_gain
-                        else:
-                            delta_gains[next_action] = delta_gain
-
-        for next_rec_node in rec_set:
-            source = assignment[next_rec_node[1]][next_rec_node[0]]
-            # source = assignment[next_rec_node]
-            if not lock_dict[next_rec_node]:
-                for next_destination in range(num_partitions):
-                    if source != next_destination:
-                        next_action = (next_rec_node[1], next_rec_node[0], next_destination)
-                        
-                        next_rec_counts_b, source1 = update_counts(rec_counts_pre, next_rec_node, next_destination, assignment)
-                        next_rec_config_b = update_config(rec_config, next_rec_counts_b, source1, next_destination)
-                        
-                        next_rec_counts_ab, source2 = update_counts(rec_counts_a, next_rec_node, next_destination, assignment_new)
-                        next_rec_config_ab = update_config(rec_config_a, next_rec_counts_ab, source2, next_destination)
-
-                        full_config_b = update_full_config(source1, next_destination, conf, root_config, next_rec_config_b)
-                        full_config_ab = update_full_config(source2, next_destination, conf_a, root_config_a, next_rec_config_ab)
-
-                        delta_gain = cost_a - cost - get_cost(full_config_ab,costs) + get_cost(full_config_b,costs)
-    
-                        if next_action in delta_gains:
-                            delta_gains[next_action] += delta_gain
-                        else:
-                            delta_gains[next_action] = delta_gain
-            
-        hypergraph.set_hyperedge_attribute(edge, 'cost', cost_new)
-        hypergraph.set_hyperedge_attribute(edge, 'root_counts', root_counts_new)
-        hypergraph.set_hyperedge_attribute(edge, 'rec_counts', rec_counts_new)
-        hypergraph.set_hyperedge_attribute(edge, 'root_config', root_config_new)
-        hypergraph.set_hyperedge_attribute(edge, 'rec_config', rec_config_new)
-        hypergraph.set_hyperedge_attribute(edge, 'config', conf_a)
-            
-
-    for action in delta_gains:
-        i = delta_gains[action]
-        old_gain = array[action]
-        if action in buckets[old_gain]:
-            buckets[old_gain].remove(action)
-            buckets[old_gain - i].add(action)
-            
-        array[action] -= i
-    return assignment_new, array, buckets
-
-def take_action_and_update_simple(hypergraph,
-                                  node,
-                                  destination,
-                                  array,
-                                  buckets,
-                                  num_partitions,
-                                  lock_dict,
-                                  assignment,
-                                  costs):
-    assignment_new = move_node(node,destination,assignment)
-    # print("Destination", destination)
-    node_set = set()
-    edges = hypergraph.node2hyperedges[node]
-
-    for edge in edges:
-        root_set = hypergraph.hyperedges[edge]['root_set']
-        rec_set = hypergraph.hyperedges[edge]['receiver_set']
-        nodes = root_set.union(rec_set)
-        node_set = node_set.union(nodes)
-
-    for node in node_set:
-        if node not in lock_dict:
-            node_assignment = assignment[node[1]][node[0]]
-            # node_assignment = assignment[node]
-            for dest in range(num_partitions):
-                if node_assignment != dest:
-                    gain = find_gain(hypergraph,node, dest,assignment_new,num_partitions,costs)
-                    old_gain = array[(node[1], node[0], dest)]
-                    array[(node[1], node[0], dest)] = gain
-                    if (node[1], node[0], dest) in buckets[old_gain]:
-                        buckets[old_gain].remove((node[1], node[0], dest))
-                        buckets[gain].add((node[1], node[0], dest))
-
-    return assignment_new, array, buckets
-
 def take_action_and_update(hypergraph,
                            node,
                            destination,
@@ -712,14 +562,19 @@ def take_action_and_update_homo(hypergraph,
         if node in root_set:
             root_counts_new, source = update_counts(root_counts,node,destination,assignment)
             rec_counts_new = rec_counts.copy()
-
             config_new = update_config_from_counts(conf,root_counts_new,rec_counts_new,source,destination)
+
         elif node in rec_set:
             rec_counts_new, source = update_counts(rec_counts,node,destination,assignment)
             root_counts_new = root_counts.copy()
             config_new = update_config_from_counts(conf,root_counts_new,rec_counts_new,source,destination)
 
-        cost_a = costs[tuple(config_new)]
+        if tuple(config_new) not in costs:
+            cost_a = config_to_cost(config_new,costs)
+            costs[tuple(config_new)] = cost_a
+        else:
+            cost_a = costs[tuple(config_new)]
+
         conf_a = config_new
 
         root_counts_pre = root_counts
@@ -740,7 +595,19 @@ def take_action_and_update_homo(hypergraph,
 
                         next_root_counts_ab, source2 = update_counts(root_counts_a, next_root_node, next_destination, assignment_new)
                         full_config_ab = update_config_from_counts(conf_a,next_root_counts_ab,rec_counts_a,source2,next_destination)
-                        delta_gain = cost_a - cost - costs[tuple(full_config_ab)] + costs[tuple(full_config_b)]
+                        if tuple(full_config_ab) not in costs:
+                            cost_ab = config_to_cost(full_config_ab,costs)
+                            costs[tuple(full_config_ab)] = cost_ab
+                        else:
+                            cost_ab = costs[tuple(full_config_ab)]
+
+                        if tuple(full_config_b) not in costs:
+                            cost_b = config_to_cost(full_config_b,costs)
+                            costs[tuple(full_config_b)] = cost_b
+                        else:
+                            cost_b = costs[tuple(full_config_b)]
+
+                        delta_gain = cost_a - cost - cost_ab + cost_b
 
                         if next_action in delta_gains:
                             delta_gains[next_action] += delta_gain
@@ -760,7 +627,18 @@ def take_action_and_update_homo(hypergraph,
                         next_rec_counts_ab, source2 = update_counts(rec_counts_a, next_rec_node, next_destination, assignment_new)
                         full_config_ab = update_config_from_counts(conf_a,root_counts_a,next_rec_counts_ab,source2,next_destination)
 
-                        delta_gain = cost_a - cost - costs[tuple(full_config_ab)] + costs[tuple(full_config_b)]
+                        if tuple(full_config_ab) not in costs:
+                            cost_ab = config_to_cost(full_config_ab,costs)
+                            costs[tuple(full_config_ab)] = cost_ab
+                        else:
+                            cost_ab = costs[tuple(full_config_ab)]
+                        if tuple(full_config_b) not in costs:
+                            cost_b = config_to_cost(full_config_b,costs)
+                            costs[tuple(full_config_b)] = cost_b
+                        else:
+                            cost_b = costs[tuple(full_config_b)]
+
+                        delta_gain = cost_a - cost - cost_ab + cost_b
 
 
 

@@ -1,5 +1,5 @@
 from disqco.parti.FM.FM_methods_ext import *
-from disqco.graphs.GCP_hypergraph_extended import HyperGraph
+from disqco.graphs.QC_hypergraph_extended import HyperGraph
 from typing import Hashable, Iterable
 import numpy as np
 
@@ -70,7 +70,7 @@ def FM_pass(graph: HyperGraph,
     # assign_all_counts_and_configs(graph, assignment, num_partitions)
     locked      = _unlock_all(graph)
     
-    gain_dict = find_all_gains(graph, qubit_assignment, gate_assignment, num_partitions, locked, costs)
+    gain_dict = find_all_gains(graph, qubit_assignment, gate_assignment, num_partitions, locked)
     # for action, gain in gain_dict.items():
     #     print(f'Checking action: {action}, gain: {gain}')
     buckets   = _build_buckets(gain_dict, max_gain)

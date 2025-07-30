@@ -2,6 +2,51 @@ import matplotlib.pyplot as plt
 from qiskit import transpile
 import numpy as np
 
+def check_no_cross_partition_gates(circuit, qpu_graph):
+    """
+    Checks that there are no invalid two-qubit gates:
+    - Gates between Qi and Qj (i ≠ j) are NOT allowed.
+    - Gates between Ci and Qi are allowed.
+    - Gates between Ci and Cj are allowed ONLY if i and j are connected in qpu_graph.
+    Returns True if valid, False otherwise. Prints offending gates if found.
+    """
+    # Map qubits to their register index and type (Q for data, C for comm)
+    qubit_to_reg = {}
+    qubit_to_type = {}
+    for reg in circuit.qregs:
+        if reg.name.startswith("Q"):
+            reg_idx = int(reg.name[1:].split("_")[0])
+            for q in reg:
+                qubit_to_reg[q] = reg_idx
+                qubit_to_type[q] = "Q"
+        elif reg.name.startswith("C"):
+            reg_idx = int(reg.name[1:].split("_")[0])
+            for q in reg:
+                qubit_to_reg[q] = reg_idx
+                qubit_to_type[q] = "C"
+    valid = True
+    for instr, qargs, _ in circuit.data:
+        if instr.num_qubits == 2:
+            types = [qubit_to_type.get(q, None) for q in qargs]
+            regs = [qubit_to_reg.get(q, None) for q in qargs]
+            # Check for Qi-Qj (i ≠ j)
+            if types[0] == "Q" and types[1] == "Q" and regs[0] != regs[1]:
+                print(f"Invalid gate {instr.name} between data registers Q{regs[0]} and Q{regs[1]} on qubits {qargs}")
+                valid = False
+            # Check for Ci-Qj or Qi-Cj (allowed)
+            elif (types[0] == "C" and types[1] == "Q") or (types[0] == "Q" and types[1] == "C"):
+                continue
+            # Check for Ci-Cj
+            elif types[0] == "C" and types[1] == "C":
+                if regs[0] == regs[1]:
+                    continue
+                elif qpu_graph.has_edge(regs[0], regs[1]) or qpu_graph.has_edge(regs[1], regs[0]):
+                    continue
+                else:
+                    print(f"Invalid gate {instr.name} between comm registers C{regs[0]} and C{regs[1]} (not connected) on qubits {qargs}")
+                    valid = False
+    return valid
+
 def run_sampler(circuit, shots=4096):
     from qiskit_aer.primitives import SamplerV2
     sampler = SamplerV2()

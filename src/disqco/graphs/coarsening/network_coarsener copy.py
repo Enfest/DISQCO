@@ -1,5 +1,5 @@
 from disqco.graphs.quantum_network import QuantumNetwork
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
+from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 import networkx as nx
 from copy import deepcopy
 

@@ -52,7 +52,6 @@ def group_distributable_packets_sym(layers,group_anti_diags=True):
                 qubit = op['qargs'][0]
                 diag = None
                 diag = check_diag_gate(op, include_anti_diags=group_anti_diags)
-                
                 gate = copy.deepcopy(op)
                 if diag == False:
                     if qubit in live_controls:
@@ -64,11 +63,23 @@ def group_distributable_packets_sym(layers,group_anti_diags=True):
                             del unchosen_groups[partner]
                             del live_controls[qubit] 
                         else:
-                            # if len(group['sub-gates']) == 1:
-                            #     new_layers[start_layer].append(group['sub-gates'][0])
-                            # else:
-                            #     del group['time']
-                            new_layers[start_layer].append(group)
+                            sub_gates = group['sub-gates']
+                            if len(sub_gates) == 1:
+                                start_layer = sub_gates[0]['time']
+                                new_layers[start_layer].append(sub_gates[0])
+                            else:
+                                while True:
+                                    if sub_gates[-1]['type'] == 'single-qubit':
+                                        sub_gate = sub_gates.pop(-1)
+                                        time_step = sub_gate['time']
+                                        new_layers[time_step].append(sub_gate)
+                                        del sub_gate['time']
+                                    else:
+                                        break
+
+
+                                new_layers[start_layer].append(group)
+
                             del live_controls[qubit]
                     new_layers[l].append(gate)
                 else:
@@ -133,9 +144,14 @@ def group_distributable_packets_sym(layers,group_anti_diags=True):
                             partner = pair[1]
                         else:
                             partner = pair[0]
-
                         if partner in unchosen_groups and root in unchosen_groups:
                             if unchosen_groups[partner] == root and unchosen_groups[root] == partner:
+                                for subgate in live_controls[partner]['sub-gates']:
+                                    if subgate['type'] == 'single-qubit':
+                                        gate_time = subgate['time']
+                                        del subgate['time']
+                                        new_layers[gate_time].append(subgate)
+                                        
                                 del unchosen_groups[partner]
                                 del live_controls[partner] 
                                 del unchosen_groups[root]

@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 import time
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
+from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 class HypergraphCoarsener:
     """
     A class that provides coarsening methods for a quantum-circuit hypergraph.

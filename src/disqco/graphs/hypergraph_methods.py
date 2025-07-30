@@ -1,6 +1,6 @@
 from itertools import product
 import numpy as np
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
+from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 
 def get_all_configs(num_partitions : int, hetero = False, sparse = False) -> list[set[int]]:
     """
@@ -21,7 +21,7 @@ def get_all_configs(num_partitions : int, hetero = False, sparse = False) -> lis
 
     return list(configs)
 
-def config_to_cost(config : tuple[int], ) -> int:
+def config_to_cost(config : tuple[int], costs : dict[tuple[int], int] | None = None) -> int:
     """
     Converts a configuration tuple to its corresponding cost (assuming all to all connectivity)."
     """
@@ -29,6 +29,8 @@ def config_to_cost(config : tuple[int], ) -> int:
     for element in config:
         if element == 1:
             cost += 1
+    if costs is not None:
+        costs[tuple(config)] = cost
     return cost
 
 def get_all_costs_hetero(network, 
@@ -60,12 +62,12 @@ def get_all_costs(configs : list[tuple[int]]
 
     return costs
 
-def get_cost(config : tuple[int], costs : np.array) -> int:
-        config = list(config)
-        config = [str(x) for x in config]
-        config = "".join(config)
-        config = int(config, 2)
-        return costs[config]
+# def get_cost(config : tuple[int], costs : np.array) -> int:
+#         config = list(config)
+#         config = [str(x) for x in config]
+#         config = "".join(config)
+#         config = int(config, 2)
+#         return costs[config]
 
 def hedge_k_counts(hypergraph,
                    hedge,
@@ -206,7 +208,7 @@ def hedge_to_cost(hypergraph : QuantumCircuitHyperGraph,
     Computes the cost of a hyperedge based on its configuration and the current assignment.
     """ 
     config = map_hedge_to_config(hypergraph, hedge, assignment, num_partitions)
-    cost = get_cost(config, costs)
+    cost = config_to_cost(config)
     return cost
 
 def hedge_to_cost_hetero(hypergraph : QuantumCircuitHyperGraph, 

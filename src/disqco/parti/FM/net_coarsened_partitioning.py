@@ -1,12 +1,9 @@
-from qiskit import QuantumCircuit
-from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph
+from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
-from disqco.parti.FM.FM_hetero import run_FM_sparse
 from disqco.parti.FM.partition_and_build_subgraph import partition_and_build_subgraph
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 from disqco.graphs.quantum_network import QuantumNetwork
 from disqco.parti.FM.FM_methods import calculate_full_cost_hetero
-import numpy as np
 
 def run_full_net_coarsened_FM(
     hypergraph : QuantumCircuitHyperGraph,
@@ -22,7 +19,7 @@ def run_full_net_coarsened_FM(
     """
     Outer wrapper to build the initial hypergraph, network, coarsened network, and run multilevel partitioning.
     """
-    from disqco.graphs.GCP_hypergraph import QuantumCircuitHyperGraph, SubGraphManager
+    from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph, SubGraphManager
     from disqco.graphs.coarsening.network_coarsener import NetworkCoarsener
     
 
@@ -66,22 +63,18 @@ def multilevel_network_partitioning(
     ML_internal_level_limit=6,
     passes_per_level=10
 ):
-    from disqco.parti.FM.FM_methods import set_initial_partitions
-    from disqco.graphs.GCP_hypergraph import SubGraphManager
+    from disqco.parti.FM.FM_methods import set_initial_partition_assignment
+    from disqco.graphs.QC_hypergraph import SubGraphManager
     
     coarsest_networks = network_level_list[0]
     coarsest_network = list(coarsest_networks.values())[0]
     coarsest_active_nodes = coarsest_network.active_nodes
     coarsest_node_map = {list(coarsest_active_nodes)[i]: i for i in range(len(coarsest_active_nodes))}
-    
-    initial_assignment_coarse = set_initial_partitions(
-        network=coarsest_network,
-        num_qubits=num_qubits,
-        depth=hypergraph.depth,
-        node_map=coarsest_node_map,
-    )
-    from disqco.parti.FM.fiduccia import FiducciaMattheyses
 
+    initial_assignment_coarse = set_initial_partition_assignment(graph=hypergraph,
+                                                                network=coarsest_network,
+                                                                node_map=coarsest_node_map
+                                                                )
     
     # Build initial subgraphs for first level
     sub_graph_manager = SubGraphManager(hypergraph)

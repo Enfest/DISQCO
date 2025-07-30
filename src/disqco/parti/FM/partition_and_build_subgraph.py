@@ -94,7 +94,7 @@ def partition_and_build_subgraph(
             node_map=node_map,
             sparse=True
         )
-        results = partitioner.partition(coarsener=hypergraph_coarsener, 
+        results = partitioner.partition(hypergraph_coarsener=hypergraph_coarsener, 
                                         sparse=True, level_limit=ML_internal_level_limit, 
                                         passes_per_level=passes_per_level)
 
