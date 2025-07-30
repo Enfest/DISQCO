@@ -5,13 +5,50 @@ from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 from disqco.graphs.quantum_network import QuantumNetwork
 from disqco.parti.FM.FM_methods import calculate_full_cost_hetero
 
+def stitch_solution_sparse(subgraphs, sub_assignments, num_qubits, depth):
+    """
+    Stitch together solutions from sparse subgraph assignments.
+    This version works without assignment maps by directly using the sparse assignments.
+    
+    Args:
+        subgraphs: List of subgraph objects
+        sub_assignments: List of sparse assignment matrices from each subgraph
+        source_qpus: List of source QPU IDs that each subgraph represents
+        num_qubits: Total number of qubits in original circuit
+        depth: Circuit depth
+        
+    Returns:
+        Final assignment matrix [depth][num_qubits] -> partition
+    """
+    import numpy as np
+    
+    # Initialize final assignment with -1 (unassigned)
+    final_assignment = np.full((depth, num_qubits), -1, dtype=int)
+    
+    for i, (source_node, subgraph) in enumerate(subgraphs.items()):
+        sub_assignment = sub_assignments[i]
+        # source_qpu = source_qpus[i]
+        
+        # For each node in the subgraph, copy its assignment if it's not -1
+        for node in subgraph.nodes:
+            if node[0] == 'dummy':
+                continue
+                
+            q, t = node
+            sparse_assignment = sub_assignment[t][q]
+            final_assignment[t][q] = sparse_assignment
+            
+    
+    return final_assignment
+
+
 def run_full_net_coarsened_FM(
     hypergraph : QuantumCircuitHyperGraph,
     num_qubits : int,
     network : QuantumNetwork,
     coarsening_factor : int = 2,
     passes_per_level : int = 10,
-    use_multiprocessing : bool = False,
+    use_multiprocessing : bool = True,
     hypergraph_coarsener : callable = HypergraphCoarsener().coarsen_recursive_subgraph_batch,
     group_gates : bool = True,
     ML_internal_level_limit : int = 100,
@@ -51,7 +88,6 @@ def run_full_net_coarsened_FM(
 
 import multiprocessing as mp
 from functools import partial
-from disqco.parti.FM.net_coarsened_FM import stitch_solution_sparse
 
 def multilevel_network_partitioning(
     network_level_list,

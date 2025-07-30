@@ -341,6 +341,13 @@ class QuantumCircuitHyperGraph:
                         if t != start_time:
                             self.set_node_attribute((root,t),'type', 'root_t')
                     self.add_hyperedge(root_node,root_set,receiver_set)
+    
+    def is_subgraph(self):
+        for node in self.nodes:
+            if node[0] == 'dummy':
+                return True
+        return False
+
 
     def draw(self, network: None = None, assignment: np.ndarray | None = None, qpu_info: list[int] | dict[str, int] | None = None, *, show_labels=True, output='tikz', **kwargs):
         """
@@ -366,6 +373,15 @@ class QuantumCircuitHyperGraph:
         """
         if output == 'tikz':
             from disqco.drawing.tikz_drawing import draw_graph_tikz
+            if self.is_subgraph():
+                from disqco.drawing.tikz_drawing import draw_subgraph_tikz
+
+                return draw_subgraph_tikz(
+                    self,
+                    network=network,
+                    assignment=assignment,
+                    show_labels=show_labels,
+                    **kwargs)
             return draw_graph_tikz(
                 self,
                 network=network,
@@ -373,6 +389,7 @@ class QuantumCircuitHyperGraph:
                 show_labels=show_labels,
                 **kwargs,
             )
+
         elif output == 'mpl':
             from disqco.drawing.mpl_drawing import draw_hypergraph_mpl
             if qpu_info is None and network is not None:

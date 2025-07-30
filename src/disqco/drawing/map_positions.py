@@ -428,15 +428,12 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
     slot_positions = {}
     node_positions = {}
 
-    print(qpu_sizes)
     all_free_spaces = []
 
     for t in range(depth):
         free_spaces = {}
         for i, qpu_size in enumerate(qpu_sizes):
             free_spaces[i] = [j for j in range(qpu_size)]
-            
-        print(f'For time {t}, free spaces: {free_spaces}')
         all_free_spaces.append(free_spaces)
 
     y_index = 0
@@ -444,7 +441,6 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
         for k in range(qpu):
             y_index += 1
             slot_positions[(i, k)] = y_index
-            print(f'Slot position for (QPU {i}, qubit {k}): {slot_positions[(i, k)]}')
 
     inverse_assignment_map = {}
     if assignment_map is not None:
@@ -455,26 +451,19 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
         y = None
         for t in range(depth):
             node = (q, t)
-            print(f'Checking sub-node {node}')
             if assignment_map is not None:
                 if (q, t) not in inverse_assignment_map:
                     continue
-            print(f'Sub node is in the graph: {node}')
             
-            print(f'Original node for sub-node {q,t}: {node}')
             partition = assignment[t][q]
             
             # Skip nodes with sparse assignment value of -1
             if partition == -1:
                 continue
                 
-            print(f'Partition for node {node} at time {t}: {partition}')
             if y is None:
-                print(f'Node has not been assigned at a previous time-step')
                 y = all_free_spaces[t][partition].pop(0)
-                print(f'Assigned y={y} to node {node}')
             else:
-                print(f'Node has been assigned at a previous time-step, checking for y={y}')
                 if y in all_free_spaces[t][partition]:
                     all_free_spaces[t][partition].remove(y)
                 else:
@@ -483,7 +472,6 @@ def find_node_layout(graph, assignment, qpu_sizes, assignment_map=None):
             slot = slot_positions.get((partition, y), None)
             
             node_positions[node] = slot
-            print(f'Node {node} assigned to slot {slot} at time {t}')
     return node_positions
 
 

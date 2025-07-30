@@ -1082,7 +1082,6 @@ def hypergraph_to_tikz_subgraph(
     def pick_position(node):
         # Handle dummy nodes - place them on the boundaries
         if isinstance(node, tuple) and len(node) > 2 and node[0] == "dummy":
-            print(f"Processing dummy node: {node}")
             dummy_vertical_shift = 3.0 * yscale  # Even larger shift to make dummies more visible
 
             partition = node[2]
@@ -1093,7 +1092,6 @@ def hypergraph_to_tikz_subgraph(
             # Vertical position based on partition, with good separation
             base_y = node_map[partition]   # More space between partitions
             y = base_y * yscale + dummy_vertical_shift
-            print(f"Dummy node position: (x={x}, y={y})")
             return (x, y)
                 
 
@@ -1196,8 +1194,6 @@ def hypergraph_to_tikz_subgraph(
     if network is not None and hasattr(network, 'qpu_graph'):
         qpu_graph = network.qpu_graph
         qpu_count = len(network.qpu_graph.nodes)
-
-        active_qpu_node_count = len(network.active_nodes)
         # x position for QPU nodes (to the right of QPU labels)
         qpu_x = right_x + 1.5 * xscale  
         # y positions: center of each QPU region
@@ -1205,7 +1201,7 @@ def hypergraph_to_tikz_subgraph(
         prev_boundary = 0
         for node in network.active_nodes:
             i = node_map[node] if node_map is not None else node
-            next_boundary = sum(qpu_sizes[:i+1]) if i < qpu_count-1 else num_qubits_phys
+            next_boundary = sum(qpu_sizes[:i+1]) if i < qpu_count - 1 else num_qubits_phys
             # Center between prev_boundary and next_boundary
             y = (num_qubits_phys - (prev_boundary + next_boundary)/2) * yscale
             qpu_y[node] = y
@@ -1224,8 +1220,8 @@ def hypergraph_to_tikz_subgraph(
 
         # Draw QPU nodes
         # Custom QPU node scaling based only on num_qubits
-        qpu_node_scale = min(2.0, max(0.5, 10.0 / num_qubits))
-        qpu_label_scale = qpu_node_scale
+        qpu_node_scale = min(2.0, max(0.5, 10.0 / num_qubits)) * node_scale * 0.5
+        qpu_label_scale = qpu_node_scale * 6.0
         # Shift QPU network further to the right
         qpu_x = right_x + 3.0 * xscale
         for node in network.qpu_graph.nodes:
@@ -1252,11 +1248,12 @@ def hypergraph_to_tikz_subgraph(
         style = pick_style(n)
         # Check if it's a dummy node - do not show labels for dummy nodes
         is_dummy = isinstance(n, tuple) and len(n) >= 2 and n[0] == "dummy"
-        
+        if is_dummy:
+
+            continue
+    
         if show_labels:
-            if is_dummy:
-                # label = f"QPU{n[2]}"  # Use partition info for dummy nodes
-                continue
+
 
             q, t = n
             label = f"$({q},{t})$"
@@ -1268,11 +1265,11 @@ def hypergraph_to_tikz_subgraph(
             tikz_code.append(
                 f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
             )
-    else:
-            # No labels for dummy nodes or when show_labels is False
-            tikz_code.append(
-                f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
-            )
+        # else:
+        #     # No labels for dummy nodes or when show_labels is False
+        #     tikz_code.append(
+        #         f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
+        #     )
     tikz_code.append(r"  \end{pgfonlayer}")
 
     # Draw edges - using improved logic from hypergraph_to_tikz
@@ -1362,6 +1359,7 @@ def hypergraph_to_tikz_subgraph(
                         root_y = (num_qubits_phys - pos_list[(q_idx, t_idx)]) * yscale
                     else:
                         root_y = (num_qubits_phys - q_idx) * yscale
+                        
                 else:
                     _, root_y = pick_position(root_node)
                 
