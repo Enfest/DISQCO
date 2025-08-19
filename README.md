@@ -30,7 +30,7 @@ For larger networks, network coarsening can be employed, which permits hierarchi
 
 A circuit extraction tool is also included which is integrated with IBM qiskit, through which we can extract a circuit from our partitioned hypergraph which splits qubits over multiple registers and handles all cross-register communication using shared entanglement and LOCC. QPUs are implemented as separate registers of a joint quantum circuit, where each QPU has a data qubit register and a communication qubit register. A joint classical register is shared among all. This can be tested in the [circuit extractor notebook](demos/circuit_extraction_demo.ipynb). 
 
-Circuit extraction is compatible with general networks, and produces an output which only requests EPR pairs on directly connected network nodes. This is demonstrated in [this notebook](demos/circuit_extraction_heterogeneous.ipynb)
+Circuit extraction is compatible with general networks, and produces an output which only requests EPR pairs on directly connected network nodes. This is demonstrated in [this notebook](demos/circuit_extraction_heterogeneous.ipynb).
 ## Intra-QPU compilation and virtual DQC
 
 Coming soon
