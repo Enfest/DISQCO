@@ -489,7 +489,6 @@ def draw_graph_tikz(hypergraph, network = None, assignment = None, invert_colors
     args = f"-f -r --dpi={dpi}"
     return ip.run_cell_magic('tikz', args, tikz_code)
 
-
 def hypergraph_to_tikz_v2(
     H : HyperGraph,
     qubit_assignment,
