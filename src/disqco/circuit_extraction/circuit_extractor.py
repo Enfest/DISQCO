@@ -746,17 +746,17 @@ class PartitionedCircuitExtractor:
                 current_assignment = self.current_assignment
                 for qpu in self.qpu_info:
                     num_filled_slots = current_assignment.count(qpu)
-                    print(f'QPU {qpu} has {num_filled_slots} filled slots in current assignment')
+                    # print(f'QPU {qpu} has {num_filled_slots} filled slots in current assignment')
                 for qpu in self.qpu_info:
                     num_filled_slots = self.partition_assignment[gate['time']+1].count(qpu)
-                    print(f'QPU {qpu} has {num_filled_slots} filled slots in next assignment')
-                print(f'Current assignment: {self.current_assignment}')
-                print(f'Next assignment: {self.partition_assignment[gate['time']+1]}')
-                print(f'Assignment on root qubit: {self.partition_assignment[gate["time"]][root_q]}')
-                print(f'Next assignment on root qubit: {self.partition_assignment[gate["time"]+1][root_q]}')
-                print(f'Assignment on q1 qubit: {self.partition_assignment[gate["time"]][q1]}')
-                print(f'Next assignment on q1 qubit: {self.partition_assignment[gate["time"]+1][q1]}')
-                print(f'Current root data qubit: {self.qubit_manager.log_to_phys_idx[root_q]}')
+                #     print(f'QPU {qpu} has {num_filled_slots} filled slots in next assignment')
+                # print(f'Current assignment: {self.current_assignment}')
+                # print(f'Next assignment: {self.partition_assignment[gate['time']+1]}')
+                # print(f'Assignment on root qubit: {self.partition_assignment[gate["time"]][root_q]}')
+                # print(f'Next assignment on root qubit: {self.partition_assignment[gate["time"]+1][root_q]}')
+                # print(f'Assignment on q1 qubit: {self.partition_assignment[gate["time"]][q1]}')
+                # print(f'Next assignment on q1 qubit: {self.partition_assignment[gate["time"]+1][q1]}')
+                # print(f'Current root data qubit: {self.qubit_manager.log_to_phys_idx[root_q]}')
                 for i in range(len(self.current_assignment)):
                     print(f'Qubit {i} should be in partition {self.current_assignment[i]}')
                     data_i = self.qubit_manager.log_to_phys_idx[i]
