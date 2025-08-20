@@ -4,27 +4,23 @@ import math as mt
 def check_diag_gate(gate, include_anti_diags = False):
     "Checks if a gate is diagonal or anti-diagonal"
     name = gate['name']
-    if name == 'u' or name == 'u3':
-        theta = gate['params'][0]
-        if round(theta % mt.pi*2, 2) == round(0, 2):
-            return True
-        elif round(theta % mt.pi*2, 2) == round(mt.pi/2, 2):
-            if include_anti_diags:
+    if name in ('u', 'u3'):
+        # Treat u/u3 as diagonal only if theta mod 2pi == 0; anti-diagonal if pi/2 and include_anti_diags
+        params = gate.get('params', []) or []
+        if len(params) >= 1:
+            theta = params[0]
+            if round(theta % (mt.pi*2), 2) == 0.00:
                 return True
-            else:
-                return False
-        else:
-            return False
+            elif round(theta % (mt.pi*2), 2) == round(mt.pi/2, 2):
+                return True if include_anti_diags else False
+        return False
     else:
         if name == 'h':
             return False
-        elif name == 'z' or name == 't' or name == 's' or name == 'rz' or name == 'u1':
+        elif name in ('z', 't', 's', 'rz', 'u1'):
             return True
-        elif name == 'x' or 'y':
-            if include_anti_diags:
-                return True
-            else:
-                return False
+        elif name in ('x', 'y'):
+            return True if include_anti_diags else False
         else:
             return False
 
@@ -81,7 +77,10 @@ def group_distributable_packets_sym(layers,group_anti_diags=True):
                                 new_layers[start_layer].append(group)
 
                             del live_controls[qubit]
-                    new_layers[l].append(gate)
+                        new_layers[l].append(gate)
+                    else:
+                        # No live group: pass the gate through
+                        new_layers[l].append(gate)
                 else:
                     if qubit in live_controls:
                         group = live_controls[qubit]
@@ -89,6 +88,15 @@ def group_distributable_packets_sym(layers,group_anti_diags=True):
                         group['sub-gates'].append(gate)
                     else:
                         new_layers[l].append(gate)
+            elif gate_type == 'measure':
+                # Preserve measurement ops and flush any live control on the same qubit
+                meas_qubit = op['qargs'][0]
+                if meas_qubit in live_controls:
+                    group = live_controls[meas_qubit]
+                    start_layer = group['time']
+                    new_layers[start_layer].append(group)
+                    del live_controls[meas_qubit]
+                new_layers[l].append(op)
             elif gate_type == 'two-qubit':
                 qubits = op['qargs']
                 gate_name = op['name']
@@ -236,8 +244,10 @@ def group_distributable_packets_asym(layers : dict, group_anti_diags : bool = Tr
                         start_layer = group['time']
                         new_layers[start_layer].append(group)
                         del live_controls[qubit]
-
-                    new_layers[l].append(gate)
+                        new_layers[l].append(gate)
+                    else:
+                        # No live group: pass the gate through
+                        new_layers[l].append(gate)
                 else:
                     if qubit in live_controls:
                         group = live_controls[qubit]
@@ -245,6 +255,15 @@ def group_distributable_packets_asym(layers : dict, group_anti_diags : bool = Tr
                         group['sub-gates'].append(gate)
                     else:
                         new_layers[l].append(gate)
+            elif gate_type == 'measure':
+                # Preserve measurement ops and flush any live control on the same qubit
+                meas_qubit = op['qargs'][0]
+                if meas_qubit in live_controls:
+                    group = live_controls[meas_qubit]
+                    start_layer = group['time']
+                    new_layers[start_layer].append(group)
+                    del live_controls[meas_qubit]
+                new_layers[l].append(op)
             elif gate_type == 'two-qubit':
                 qubits = op['qargs']
                 # We check if there is a root available for the control qubit

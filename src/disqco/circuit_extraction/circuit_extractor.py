@@ -983,7 +983,9 @@ class PartitionedCircuitExtractor:
             self.qc.measure(self.qubit_manager.log_to_phys_idx[i], self.result_reg[i])
         
         self.qc = reorder_registers_by_index(self.qc)
-        self.qc = transpile(self.qc, basis_gates= self.basis_gates + ['EPR'])
+        teleportation_gates = ['x', 'z']
+        basis_gate_set = set(teleportation_gates).union(set(self.basis_gates)).union(set(['EPR']))
+        self.qc = transpile(self.qc, basis_gates= list(basis_gate_set))
         return self.qc
     
 def reorder_registers_by_index(circuit):

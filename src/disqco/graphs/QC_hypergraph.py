@@ -274,16 +274,51 @@ class QuantumCircuitHyperGraph:
      
     def map_circuit_to_hypergraph(self,):
         layers_dict = self.layers
+        # Track measurement and reset locations per qubit to adjust temporal edges later
+        meas_times = defaultdict(set)
+        # Times where the qubit participates in any non-measure operation (single- or two-qubit, groups included)
+        op_times_non_measure = defaultdict(set)
+        print(layers_dict)
         for l in layers_dict:
             layer = layers_dict[l]
             for gate in layer:
-                if gate['type'] == 'single-qubit':
+                print(gate)
+                if gate['type'] == 'measure':
+                    qubit = gate['qargs'][0]
+                    time = l
+                    node = self.add_node(qubit, time)
+                    self.set_node_attribute(node, 'type', 'measure')
+                    self.set_node_attribute(node, 'name', 'measure')
+                    # Optional params may be empty for measure
+                    self.set_node_attribute(node, 'params', gate.get('params', []))
+                    # Associate classical bit index if provided
+                    cbit = gate.get('cbit', None)
+                    if cbit is not None:
+                        self.set_node_attribute(node, 'measurement_bit', cbit)
+                    # Mark measurement time to cut temporal edges after this time
+                    meas_times[qubit].add(time)
+                elif gate['type'] == 'single-qubit':
                     qubit = gate['qargs'][0]
                     time = l
                     node = self.add_node(qubit,time)
                     self.set_node_attribute(node,'type',gate['type'])
                     self.set_node_attribute(node,'name',gate['name'])
                     self.set_node_attribute(node,'params',gate['params'])
+                    # Mark classical control if present
+                    control_bit = gate.get('classical_control_bit', gate.get('cbit', None))
+                    if control_bit is not None:
+                        self.set_node_attribute(node, 'classically_controlled', True)
+                        self.set_node_attribute(node, 'control_bit', control_bit)
+                    else:
+                        # Register-wide condition fallback
+                        reg = gate.get('classical_control_register', None)
+                        val = gate.get('classical_control_val', None)
+                        if reg is not None and val is not None:
+                            self.set_node_attribute(node, 'classically_controlled', True)
+                            self.set_node_attribute(node, 'control_register', reg)
+                            self.set_node_attribute(node, 'control_val', val)
+                    # Any non-measure single-qubit op restarts temporal edges from this time forward
+                    op_times_non_measure[qubit].add(time)
                 elif gate['type'] == 'two-qubit':
                     qubit1 = gate['qargs'][0]
                     qubit2 = gate['qargs'][1]
@@ -301,6 +336,9 @@ class QuantumCircuitHyperGraph:
                     self.set_hyperedge_attribute((node1,node2),'type',gate['type'])
                     self.set_hyperedge_attribute((node1,node2),'name',gate['name'])
                     self.set_hyperedge_attribute((node1,node2),'params',gate['params'])
+                    # Two-qubit op counts as an operation time for both qubits
+                    op_times_non_measure[qubit1].add(time)
+                    op_times_non_measure[qubit2].add(time)
                 elif gate['type'] == 'group':
                     root = gate['root']
                     start_time = l
@@ -317,6 +355,7 @@ class QuantumCircuitHyperGraph:
                             self.set_node_attribute(node,'type',sub_gate['type'])
                             self.set_node_attribute(node,'name',sub_gate['name'])
                             self.set_node_attribute(node,'params',sub_gate['params'])
+                            op_times_non_measure[qubit].add(time)
                         elif sub_gate['type'] == 'two-qubit':
                             qubit1 = sub_gate['qargs'][0]
                             qubit2 = sub_gate['qargs'][1]
@@ -336,11 +375,32 @@ class QuantumCircuitHyperGraph:
                                 self.set_node_attribute(node2,'name','target')
                             else:
                                 self.set_node_attribute(node2,'name','control')
+                            op_times_non_measure[qubit1].add(time)
+                            op_times_non_measure[qubit2].add(time)
                     for t in range(start_time,time+1):
                         root_set.add((root,t))
                         if t != start_time:
                             self.set_node_attribute((root,t),'type', 'root_t')
                     self.add_hyperedge(root_node,root_set,receiver_set)
+
+        # After building nodes/edges, adjust temporal neighbor edges per measurement/reset rules
+        # Remove edges (q,t)->(q,t+1) when a measurement has occurred and until ANY subsequent operation occurs on that qubit.
+        for q in range(self.num_qubits):
+            q_meas = meas_times.get(q, set())
+            q_ops  = op_times_non_measure.get(q, set())
+            connected = True  # default before any measurement
+            for t in range(0, self.depth - 1):
+                # Evaluate events at current time t; measurement at t breaks, non-measure op at t restarts
+                if t in q_meas:
+                    connected = False
+                elif t in q_ops:
+                    connected = True
+                if not connected:
+                    node_a = (q, t)
+                    node_b = (q, t+1)
+                    edge_id = (node_a, node_b)
+                    if edge_id in self.hyperedges:
+                        self.remove_hyperedge(edge_id)
     
     def is_subgraph(self):
         for node in self.nodes:
@@ -398,7 +458,7 @@ class QuantumCircuitHyperGraph:
                 qpu_info = {0: self.num_qubits}
             if assignment is None:
                 # fallback: all to partition 0
-                assignment = np.zeros((self.num_qubits, self.depth), dtype=int)
+                assignment = np.zeros((self.depth, self.num_qubits), dtype=int)
             return draw_hypergraph_mpl(
                 self,
                 assignment,

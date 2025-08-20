@@ -38,6 +38,8 @@ def draw_hypergraph_mpl(
     small_node_scale = node_scale * 0.5
 
     space_map = space_mapping(qpu_sizes, depth)
+    print(space_map)
+    print(assignment)
     pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     if ax is None:
@@ -90,6 +92,9 @@ def draw_hypergraph_mpl(
                 return 'invisible'
             else:
                 return 'black'
+        elif node_type == "measure":
+            # Draw measurements as black nodes (like control)
+            return 'black'
         elif node_type == "single-qubit":
             params = H.get_node_attribute(node, 'params', None) if hasattr(H, 'get_node_attribute') else None
             if params is not None and len(params) > 0:
@@ -113,7 +118,26 @@ def draw_hypergraph_mpl(
         if show_labels and style != 'dummy':
             if isinstance(n, tuple) and len(n) == 2:
                 q, t = n
-                ax.text(x, y+0.1, f"({q},{t})", fontsize=8, ha='center', va='bottom', color='k' if not invert_colors else 'w', zorder=4)
+                # Build label with classical bit info for measure or classically controlled nodes
+                extra = ""
+                n_type = H.get_node_attribute(n, 'type', None) if hasattr(H, 'get_node_attribute') else None
+                if n_type == 'measure':
+                    cbit = H.get_node_attribute(n, 'measurement_bit', None)
+                    if cbit is not None:
+                        extra = f"c{cbit}"
+                elif hasattr(H, 'get_node_attribute') and H.get_node_attribute(n, 'classically_controlled', False):
+                    reg = H.get_node_attribute(n, 'control_register', None)
+                    val = H.get_node_attribute(n, 'control_val', None)
+                    if reg is not None and val is not None:
+                        extra = f"{reg}=={val}"
+                    else:
+                        cbit = H.get_node_attribute(n, 'control_bit', None)
+                        if cbit is not None:
+                            extra = f"c{cbit}"
+                # Draw main coords above and condition label below to avoid overlap
+                ax.text(x, y+0.12, f"({q},{t})", fontsize=8, ha='center', va='bottom', color='k' if not invert_colors else 'w', zorder=4)
+                if extra:
+                    ax.text(x, y-0.12, f"{extra}", fontsize=8, ha='center', va='top', color='k' if not invert_colors else 'w', zorder=4)
 
     for edge_id, edge_info in getattr(H, 'hyperedges', {}).items() if hasattr(H, 'hyperedges') else []:
         roots = list(edge_info['root_set'])
@@ -198,9 +222,16 @@ def draw_hypergraph_mpl(
             right_y_val = qubit
         right_y = (num_qubits_phys - int(right_y_val)) * yscale
         ax.scatter(left_x, left_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
-        ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+        # Only draw right boundary node if the final time-edge exists
+        has_tail = True
+        if depth >= 2 and hasattr(H, 'hyperedges'):
+            edge_id = ((qubit, depth - 2), (qubit, depth - 1))
+            has_tail = edge_id in getattr(H, 'hyperedges', {})
+        if has_tail:
+            ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
         ax.plot([left_x, node_pos.get((qubit, 0), (left_x, left_y))[0]], [left_y, node_pos.get((qubit, 0), (left_x, left_y))[1]], color=edge_color, lw=1, zorder=2)
-        ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
+        if has_tail:
+            ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
         # Always show q_i labels at the start
         ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', color='k' if not invert_colors else 'w', zorder=4)
 
