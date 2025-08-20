@@ -61,6 +61,8 @@ def hypergraph_to_tikz(
 
     # Build the position map for real (qubit,time) nodes
     space_map = space_mapping(qpu_sizes, depth)
+    print(space_map)
+    print(assignment)
     pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     # If no nodes, handle gracefully
@@ -122,6 +124,9 @@ def hypergraph_to_tikz(
                 return "invisibleStyle"
             else:
                 return "blackStyle"
+        elif node_type == "measure":
+            # Draw measurements as black nodes (like control)
+            return "blackStyle"
         elif node_type == "single-qubit":
             # Check if it's an identity gate
             params = H.get_node_attribute(node, 'params', None)
@@ -222,10 +227,33 @@ def hypergraph_to_tikz(
         if isinstance(n, tuple) and len(n) == 2:
             q, t = n
             if show_labels:
-                label = f"$({q},{t})$"
-                tikz_code.append(
-                    f"    \\node [style={style}, label={{[nodeLabel]above right:{label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
-                )
+                # Primary node label (coordinates) above-right
+                top_label = f"$({q},{t})$"
+                # Condition/measurement label below
+                extra_label = ""
+                n_type = H.get_node_attribute(n, 'type', None)
+                if n_type == 'measure':
+                    cbit = H.get_node_attribute(n, 'measurement_bit', None)
+                    if cbit is not None:
+                        extra_label = f"$c{cbit}$"
+                elif H.get_node_attribute(n, 'classically_controlled', False):
+                    reg = H.get_node_attribute(n, 'control_register', None)
+                    val = H.get_node_attribute(n, 'control_val', None)
+                    if reg is not None and val is not None:
+                        extra_label = f"${reg}=={val}$"
+                    else:
+                        cbit = H.get_node_attribute(n, 'control_bit', None)
+                        if cbit is not None:
+                            extra_label = f"$c{cbit}$"
+
+                if extra_label:
+                    tikz_code.append(
+                        f"    \\node [style={style}, label={{[nodeLabel]above right:{top_label}}}, label={{[nodeLabel]below:{extra_label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
+                    )
+                else:
+                    tikz_code.append(
+                        f"    \\node [style={style}, label={{[nodeLabel]above right:{top_label}}}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
+                    )
             else:
                 tikz_code.append(
                     f"    \\node [style={style}] ({node_name(n)}) at ({x:.3f},{y:.3f}) {{}};"
@@ -348,7 +376,6 @@ def hypergraph_to_tikz(
     inverse_assignment_map = {}
 
     for qubit in range(num_qubits):
-        
         left_x = buffer_left_time * xscale + x_offset
         left_y = (num_qubits_phys - pos_list[0][qubit]) * yscale
         left_node_name = f"bufL_{qubit}"
@@ -357,13 +384,19 @@ def hypergraph_to_tikz(
             f"at ({left_x:.3f},{left_y:.3f}) {{}};"
         )
 
+        # Only draw the right boundary node if the final time-edge exists for this qubit
+        has_tail = True
+        if max_time >= 1:
+            edge_id = ((qubit, max_time - 1), (qubit, max_time))
+            has_tail = edge_id in H.hyperedges
         right_x = buffer_right_time * xscale + x_offset
         right_y = (num_qubits_phys - pos_list[max_time][qubit]) * yscale
         right_node_name = f"bufR_{qubit}"
-        tikz_code.append(
-            f"    \\node [style=whiteSmallStyle] ({right_node_name}) "
-            f"at ({right_x:.3f},{right_y:.3f}) {{}};"
-        )
+        if has_tail:
+            tikz_code.append(
+                f"    \\node [style=whiteSmallStyle] ({right_node_name}) "
+                f"at ({right_x:.3f},{right_y:.3f}) {{}};"
+            )
     tikz_code.append(r"  \end{pgfonlayer}")
     if assignment_map is not None:
         for node, (q, t) in assignment_map.items():
@@ -379,13 +412,19 @@ def hypergraph_to_tikz(
             tikz_code.append(
                 f"    \\draw [style=edgeStyle] (bufL_{qubit}) to ({node_name((q,0))});"
             )
+        # Only draw the right boundary connection if the final time-edge exists
+        last_time_idx = max_time
         if assignment_map is not None:
-            q, max_time = inverse_assignment_map[(qubit, max_time)]
+            q_map, t_map = inverse_assignment_map[(qubit, last_time_idx)]
         else:
-            q, max_time = qubit, max_time
-        if (q, max_time) in H.nodes:
+            q_map, t_map = qubit, last_time_idx
+        has_tail = True
+        if last_time_idx >= 1:
+            edge_id = ((qubit, last_time_idx - 1), (qubit, last_time_idx))
+            has_tail = edge_id in H.hyperedges
+        if has_tail and (q_map, t_map) in H.nodes:
             tikz_code.append(
-                f"    \\draw [style=edgeStyle] (bufR_{qubit}) to ({node_name((q,max_time))});"
+                f"    \\draw [style=edgeStyle] (bufR_{qubit}) to ({node_name((q_map,t_map))});"
             )
     tikz_code.append(r"  \end{pgfonlayer}")
 

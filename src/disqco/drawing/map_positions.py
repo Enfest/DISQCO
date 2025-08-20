@@ -20,7 +20,6 @@ def space_mapping(qpu_info, num_layers):
     return space_mapping
 
 def get_pos_list(graph, num_qubits, assignment, space_map, assignment_map = None):
-
     num_layers = len(space_map)
     pos_list = [[None for _ in range(num_qubits)] for _ in range(num_layers)]
 
