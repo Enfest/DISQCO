@@ -278,11 +278,9 @@ class QuantumCircuitHyperGraph:
         meas_times = defaultdict(set)
         # Times where the qubit participates in any non-measure operation (single- or two-qubit, groups included)
         op_times_non_measure = defaultdict(set)
-        print(layers_dict)
         for l in layers_dict:
             layer = layers_dict[l]
             for gate in layer:
-                print(gate)
                 if gate['type'] == 'measure':
                     qubit = gate['qargs'][0]
                     time = l
