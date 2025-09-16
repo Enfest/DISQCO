@@ -38,5 +38,7 @@ share/python-wheels/
 MANIFEST
 
 *QASM_bench/
+*QASMBench/
+Demos/beta/QASMBench/
 
 *__pycache__/
