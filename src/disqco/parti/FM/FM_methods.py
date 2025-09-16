@@ -114,7 +114,9 @@ def find_spaces(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : Quan
 
     for t in range(depth):
         spaces[t] = {qpu : value for qpu, value in qpu_sizes.items()}
+
     
+
     if graph is not None:
         for node in graph.nodes:
             if node[0] == 'dummy':
@@ -123,7 +125,7 @@ def find_spaces(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : Quan
             part = assignment[t][q]
             spaces[t][part] -= 1
 
-    
+    print(f'Spaces: {spaces}')
     return spaces
 
 def check_valid(node : tuple[int,int], destination: int, spaces: dict[int, int]) -> bool:

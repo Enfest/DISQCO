@@ -158,7 +158,7 @@ def calculate_W_matrix_cols(W, num_partitions, partition):
 def calculate_D_from_W(W_cols, partition, num_partitions):
     "Calculate the D matrix from the W matrix."
     num_qubits = len(W_cols)
-    D = np.zeros((num_qubits,num_partitions))
+    D = np.zeros((num_qubits,num_partitions), dtype=int)
     for i in range(num_qubits):
         col_i = partition[i]
         for l in range(num_partitions):
@@ -472,13 +472,12 @@ def find_starting_assignment(initial_search_size,qpu_info,graph,num_layers,rando
     return best_candidate, mapping
 
 def run_initial_OEE(full_graph,initial_partition,qpu_info):
-    
     "Run the initial OEE algorithm to find a good starting partition."
     partition = initial_partition.copy()
     g_max = np.inf
     mapping = [n for n in range(np.sum(qpu_info))]
     num_partitions = len(qpu_info)
-
+    print("Running OEE")
     while g_max > 0:
         N = set(list(full_graph.nodes()))
         cut = calculate_static_cut(partition, full_graph)

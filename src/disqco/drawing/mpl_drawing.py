@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.path import Path as MplPath
 import matplotlib.patches as patches
-from disqco.drawing.map_positions import space_mapping, get_pos_list
+from disqco.drawing.map_positions import find_node_layout, find_node_layout_sparse, space_mapping, get_pos_list
 
 def draw_hypergraph_mpl(
     H,
@@ -37,10 +37,12 @@ def draw_hypergraph_mpl(
     gate_node_scale = node_scale * 1.2
     small_node_scale = node_scale * 0.5
 
-    space_map = space_mapping(qpu_sizes, depth)
-    print(space_map)
-    print(assignment)
-    pos_list = get_pos_list(H, num_qubits, assignment, space_map)
+    # space_map = space_mapping(qpu_sizes, depth)
+    # print(space_map)
+    # print(assignment)
+    # pos_list = get_pos_list(H, num_qubits, assignment, space_map)
+
+    pos_list = find_node_layout_sparse(H, assignment, qpu_sizes)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
@@ -74,7 +76,7 @@ def draw_hypergraph_mpl(
             else:
                 q, t = node
             x = t * xscale
-            y = (num_qubits_phys - pos_list[t][q]) * yscale
+            y = (num_qubits_phys - pos_list[node]) * yscale
             return (x, y)
         return (0, 0)
 
@@ -208,36 +210,36 @@ def draw_hypergraph_mpl(
                 bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
                 ax.add_patch(bezier)
 
-    buffer_left_time = -1
-    buffer_right_time = depth
-    for qubit in range(num_qubits):
-        left_x = buffer_left_time * xscale
-        left_y_val = pos_list[0][qubit]
-        if left_y_val is None:
-            left_y_val = qubit
-        left_y = (num_qubits_phys - int(left_y_val)) * yscale
-        right_x = buffer_right_time * xscale
-        right_y_val = pos_list[depth-1][qubit]
-        if right_y_val is None:
-            right_y_val = qubit
-        right_y = (num_qubits_phys - int(right_y_val)) * yscale
-        ax.scatter(left_x, left_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
-        # Only draw right boundary node if the final time-edge exists
-        has_tail = True
-        if depth >= 2 and hasattr(H, 'hyperedges'):
-            edge_id = ((qubit, depth - 2), (qubit, depth - 1))
-            has_tail = edge_id in getattr(H, 'hyperedges', {})
-        if has_tail:
-            ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
-        ax.plot([left_x, node_pos.get((qubit, 0), (left_x, left_y))[0]], [left_y, node_pos.get((qubit, 0), (left_x, left_y))[1]], color=edge_color, lw=1, zorder=2)
-        if has_tail:
-            ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
-        # Always show q_i labels at the start
-        ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', color='k' if not invert_colors else 'w', zorder=4)
+    # buffer_left_time = -1
+    # buffer_right_time = depth
+    # for qubit in range(num_qubits):
+    #     left_x = buffer_left_time * xscale
+    #     left_y_val = pos_list[(qubit, 0)]
+    #     if left_y_val is None:
+    #         left_y_val = qubit
+    #     left_y = (num_qubits_phys - int(left_y_val)) * yscale
+    #     right_x = buffer_right_time * xscale
+    #     right_y_val = pos_list[(qubit, depth-1)]
+    #     if right_y_val is None:
+    #         right_y_val = qubit
+    #     right_y = (num_qubits_phys - int(right_y_val)) * yscale
+    #     ax.scatter(left_x, left_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+    #     # Only draw right boundary node if the final time-edge exists
+    #     has_tail = True
+    #     if depth >= 2 and hasattr(H, 'hyperedges'):
+    #         edge_id = ((qubit, depth - 2), (qubit, depth - 1))
+    #         has_tail = edge_id in getattr(H, 'hyperedges', {})
+    #     if has_tail:
+    #         ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+    #     ax.plot([left_x, node_pos.get((qubit, 0), (left_x, left_y))[0]], [left_y, node_pos.get((qubit, 0), (left_x, left_y))[1]], color=edge_color, lw=1, zorder=2)
+    #     if has_tail:
+    #         ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
+    #     # Always show q_i labels at the start
+    #     ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', color='k' if not invert_colors else 'w', zorder=4)
 
     # Draw partition boundaries and Q_i labels
     for i in range(1, len(qpu_sizes)):
-        boundary = sum(qpu_sizes[:i])
+        boundary = sum(qpu_sizes[:i])+1
         line_y = (num_qubits_phys - boundary + 0.5) * yscale
         ax.axhline(line_y, color=boundary_color, linestyle='--', lw=1, zorder=10)
         # Add Q_i label above the boundary line on the far right, starting from Q_0

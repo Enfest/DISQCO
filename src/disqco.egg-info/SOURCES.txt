@@ -51,6 +51,11 @@ src/disqco/parti/FM/multilevel_FM.py
 src/disqco/parti/FM/multilevel_FM_bench.py
 src/disqco/parti/FM/net_coarsened_partitioning.py
 src/disqco/parti/FM/partition_and_build_subgraph.py
+src/disqco/parti/fgp/QAOA.py
+src/disqco/parti/fgp/__init__.py
+src/disqco/parti/fgp/circuit_to_graph.py
+src/disqco/parti/fgp/cp_fraction.py
+src/disqco/parti/fgp/fgp_roee.py
 src/disqco/parti/genetic/__init__.py
 src/disqco/parti/genetic/genetic_FM_hybrid.py
 src/disqco/parti/genetic/genetic_algorithm_beta.py

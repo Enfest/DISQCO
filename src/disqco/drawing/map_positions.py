@@ -494,7 +494,8 @@ def find_node_layout_sparse(graph, assignment, qpu_sizes, node_map=None):
 
     slot_positions = {}
     node_positions = {}
-
+    if isinstance(qpu_sizes, list):
+        qpu_sizes = {i: size for i, size in enumerate(qpu_sizes)}
     # Create slot position mapping
     y_index = 0
     for qpu, qpu_size in qpu_sizes.items():
