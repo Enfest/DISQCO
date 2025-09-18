@@ -64,12 +64,13 @@ def find_spaces_with_ancillae(assignment : np.ndarray, qpu_sizes: dict[int, int]
     for node in graph.nodes():
         part = assignment[node]
         spaces[part] -= 1
-    
+
     for edge in graph.edges():
         node1 = edge[0]
         node2 = edge[1]
         part1 = assignment[node1]
         part2 = assignment[node2]
+
         if part1 != part2:
             spaces[part1] -= 1
             spaces[part2] -= 1
@@ -254,7 +255,6 @@ def update_spaces(source,destination,spaces):
     spaces[source] += 1
 
 def update_ancilla_spaces(source,destination,neighbour_source,spaces):
-    print(f'Updating ancilla spaces for move from {source} to {destination} with neighbour in {neighbour_source}')
     if neighbour_source == source:
         spaces[destination] -= 1
     elif neighbour_source == destination:

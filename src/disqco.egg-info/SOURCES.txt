@@ -41,8 +41,10 @@ src/disqco/parti/FM/FM_hetero.py
 src/disqco/parti/FM/FM_hetero_clean.py
 src/disqco/parti/FM/FM_main.py
 src/disqco/parti/FM/FM_main_ext.py
+src/disqco/parti/FM/FM_main_nx.py
 src/disqco/parti/FM/FM_methods.py
 src/disqco/parti/FM/FM_methods_ext.py
+src/disqco/parti/FM/FM_methods_nx.py
 src/disqco/parti/FM/FM_sub.py
 src/disqco/parti/FM/__init__.py
 src/disqco/parti/FM/fiduccia.py

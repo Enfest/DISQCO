@@ -17,7 +17,7 @@ def set_sparse_assignment(subgraph: nx.Graph, full_graph: nx.Graph, global_assig
         global_assignment[node] = qpus[i%len(qpus)]
     return global_assignment
 
-def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit=None, total_graph=None, global_assignment=None, ancilla=False):
+def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit=None, total_graph=None, global_assignment='round_robin', ancilla=False):
     """
     Main FM algorithm loop
     """
@@ -28,8 +28,8 @@ def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit
         move_limit = min(move_limit, len(graph.nodes()))
     
     # Initialize partition assignment
-    if global_assignment is None:
-        assignment = set_initial_partition_assignment(graph, qpu_sizes, method='round_robin')
+    if isinstance(global_assignment, str):
+        assignment = set_initial_partition_assignment(graph, qpu_sizes, method=global_assignment)
     else:
         assignment = global_assignment
 
@@ -37,8 +37,6 @@ def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit
         W = calculate_W_matrix(total_graph)
     else:
         W = calculate_W_matrix(graph)
-
-    print(f"W matrix:\n{W}")
     
     # Max gain is the maximum weighted degree of any node in the graph
     max_weighted_degree = 0
@@ -51,13 +49,9 @@ def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit
     best_assignment = assignment.copy()
     best_cut = calculate_cut_size(graph, assignment)
     
-    print(f"Initial cut size: {best_cut}")
-    print(f"Max gain (max weighted degree): {max_gain}")
-    
     cuts_from_all_passes = [best_cut]
 
     for iteration in range(max_iterations):
-        print(f"\nIteration {iteration + 1}")
         
         # Initialize for this pass
         current_assignment = assignment.copy()
@@ -67,7 +61,7 @@ def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit
         else:
             spaces = find_spaces(assignment, qpu_sizes, graph)
 
-        print("Spaces available:", spaces)
+        print(f'Spaces: {spaces}')
 
         D = find_all_gains(current_assignment, num_partitions, qpu_sizes,W, graph, max_gain=max_gain)
         # Fill buckets with current gains
@@ -107,8 +101,6 @@ def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit
                 graph, node, source, destination, 
                 current_assignment, num_partitions, W, D, 
                 buckets, max_gain, locked, spaces=spaces, ancillae=ancilla)
-
-            print(f'Update spaces after moving node {node} from partition {source} to {destination}: {spaces}')
             
             lock_node(node, locked)
             
@@ -123,27 +115,21 @@ def fm_algorithm(graph: nx.Graph, qpu_sizes: dict, max_iterations=10, move_limit
             best_cumulative_gain = cumulative_gains[best_gain_index]
             best_state_in_pass = states_history[best_gain_index]
             
-            print(f"  Pass complete. Total moves: {len(moves_history)}")
-            print(f"  Cumulative gains: {cumulative_gains}")
-            print(f"  Best state found at move {best_gain_index} with cumulative gain: {best_cumulative_gain}")
             
             if iteration % 1 == 0:
                 # Roll back to the best state found during this pass
                 current_assignment = best_state_in_pass
                 # Check if this pass improved the overall solution
                 current_cut = calculate_cut_size(graph, current_assignment)
-                print(f"  Current cut after rollback: {current_cut}")
 
             else:
                 # Skip the roll back, keep the current assignment
                 current_cut = calculate_cut_size(graph, current_assignment)
-                print(f"  Current cut without rollback: {current_cut}")
             cuts_from_all_passes.append(current_cut)
             if current_cut < best_cut:
                 best_cut = current_cut
                 best_assignment = current_assignment.copy()
                 assignment = current_assignment.copy()
-                print(f"  New best cut size: {best_cut}")
 
             
             
@@ -185,9 +171,7 @@ def recursive_fm_algorithm(graph: nx.Graph,  target_partitions: int, initial_ass
     current_assignment = initial_assignment.copy()
 
 
-    print(f"{indent} Current assignment before processing partitions: {current_assignment}")
     for i, p in enumerate(active_partitions):
-        print(f"{indent}Processing partition {p}")
         subgraph_nodes = [node for i, node in enumerate(graph.nodes()) if initial_assignment[i] == p]
         subgraph = graph.copy()
 
@@ -197,18 +181,13 @@ def recursive_fm_algorithm(graph: nx.Graph,  target_partitions: int, initial_ass
         
 
 
-        print(f"{indent} Subgraph for partition {p} has {len(subgraph.nodes())} nodes and {len(subgraph.edges())} edges")
         sub_qpu_sizes = {p+i: len(subgraph.nodes()) // 2 + len(subgraph.nodes()) % 2 + 1, p+i+1: len(subgraph.nodes()) // 2 + 1}
-        print(f"{indent} Subgraph QPU sizes: {sub_qpu_sizes}")
         # Recursively bisect the subgraph
-        print(len(graph.nodes()), len(subgraph.nodes()))
 
         current_assignment = set_sparse_assignment(subgraph, graph, current_assignment, sub_qpu_sizes)
-        print("Current assignment after setting sparse:", current_assignment)
 
 
 
         assignment, cut, _ = fm_algorithm(subgraph, sub_qpu_sizes, max_iterations, move_limit, total_graph=graph, global_assignment=current_assignment)
-        print(f"Optimized assignment for partition {p}: {assignment}")
 
     return recursive_fm_algorithm(graph, target_partitions, assignment, max_iterations, move_limit, depth + 1)

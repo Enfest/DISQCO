@@ -42,3 +42,5 @@ MANIFEST
 Demos/beta/QASMBench/
 
 *__pycache__/
+
+Demos/beta/graphs/
