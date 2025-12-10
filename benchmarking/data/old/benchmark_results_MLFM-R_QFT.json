@@ -1,0 +1,542 @@
+[
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 2,
+    "iteration": 0,
+    "num_two_qubit_gates": 120,
+    "cost": 7,
+    "time": 0.15433502197265625
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 2,
+    "iteration": 1,
+    "num_two_qubit_gates": 120,
+    "cost": 7,
+    "time": 0.15085697174072266
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 2,
+    "iteration": 2,
+    "num_two_qubit_gates": 120,
+    "cost": 7,
+    "time": 0.1546339988708496
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 2,
+    "iteration": 3,
+    "num_two_qubit_gates": 120,
+    "cost": 7,
+    "time": 0.15427613258361816
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 2,
+    "iteration": 4,
+    "num_two_qubit_gates": 120,
+    "cost": 7,
+    "time": 0.15541982650756836
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 2,
+    "iteration": 0,
+    "num_two_qubit_gates": 496,
+    "cost": 15,
+    "time": 0.8763198852539062
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 2,
+    "iteration": 1,
+    "num_two_qubit_gates": 496,
+    "cost": 15,
+    "time": 0.8881819248199463
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 2,
+    "iteration": 2,
+    "num_two_qubit_gates": 496,
+    "cost": 15,
+    "time": 0.8646841049194336
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 2,
+    "iteration": 3,
+    "num_two_qubit_gates": 496,
+    "cost": 15,
+    "time": 0.8678731918334961
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 2,
+    "iteration": 4,
+    "num_two_qubit_gates": 496,
+    "cost": 15,
+    "time": 0.8647720813751221
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 2,
+    "iteration": 0,
+    "num_two_qubit_gates": 1128,
+    "cost": 23,
+    "time": 2.551114082336426
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 2,
+    "iteration": 1,
+    "num_two_qubit_gates": 1128,
+    "cost": 23,
+    "time": 2.5826661586761475
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 2,
+    "iteration": 2,
+    "num_two_qubit_gates": 1128,
+    "cost": 23,
+    "time": 2.5706162452697754
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 2,
+    "iteration": 3,
+    "num_two_qubit_gates": 1128,
+    "cost": 23,
+    "time": 2.5684561729431152
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 2,
+    "iteration": 4,
+    "num_two_qubit_gates": 1128,
+    "cost": 23,
+    "time": 2.6195387840270996
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 2,
+    "iteration": 0,
+    "num_two_qubit_gates": 2016,
+    "cost": 31,
+    "time": 5.49341893196106
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 2,
+    "iteration": 1,
+    "num_two_qubit_gates": 2016,
+    "cost": 31,
+    "time": 5.553600072860718
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 2,
+    "iteration": 2,
+    "num_two_qubit_gates": 2016,
+    "cost": 31,
+    "time": 5.555943250656128
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 2,
+    "iteration": 3,
+    "num_two_qubit_gates": 2016,
+    "cost": 31,
+    "time": 5.51529598236084
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 2,
+    "iteration": 4,
+    "num_two_qubit_gates": 2016,
+    "cost": 31,
+    "time": 5.533205032348633
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 2,
+    "iteration": 0,
+    "num_two_qubit_gates": 3160,
+    "cost": 39,
+    "time": 10.710877180099487
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 2,
+    "iteration": 1,
+    "num_two_qubit_gates": 3160,
+    "cost": 39,
+    "time": 10.769368171691895
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 2,
+    "iteration": 2,
+    "num_two_qubit_gates": 3160,
+    "cost": 39,
+    "time": 10.672680139541626
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 2,
+    "iteration": 3,
+    "num_two_qubit_gates": 3160,
+    "cost": 39,
+    "time": 10.761355876922607
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 2,
+    "iteration": 4,
+    "num_two_qubit_gates": 3160,
+    "cost": 39,
+    "time": 10.517170906066895
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 2,
+    "iteration": 0,
+    "num_two_qubit_gates": 4560,
+    "cost": 47,
+    "time": 17.81287384033203
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 2,
+    "iteration": 1,
+    "num_two_qubit_gates": 4560,
+    "cost": 47,
+    "time": 17.664621114730835
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 2,
+    "iteration": 2,
+    "num_two_qubit_gates": 4560,
+    "cost": 47,
+    "time": 17.68512487411499
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 2,
+    "iteration": 3,
+    "num_two_qubit_gates": 4560,
+    "cost": 47,
+    "time": 17.57631278038025
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 2,
+    "iteration": 4,
+    "num_two_qubit_gates": 4560,
+    "cost": 47,
+    "time": 17.669759035110474
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 4,
+    "iteration": 0,
+    "num_two_qubit_gates": 120,
+    "cost": 18,
+    "time": 0.34253787994384766
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 4,
+    "iteration": 1,
+    "num_two_qubit_gates": 120,
+    "cost": 18,
+    "time": 0.32982778549194336
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 4,
+    "iteration": 2,
+    "num_two_qubit_gates": 120,
+    "cost": 18,
+    "time": 0.3294970989227295
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 4,
+    "iteration": 3,
+    "num_two_qubit_gates": 120,
+    "cost": 18,
+    "time": 0.3273308277130127
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 16,
+    "num_partitions": 4,
+    "iteration": 4,
+    "num_two_qubit_gates": 120,
+    "cost": 18,
+    "time": 0.3228271007537842
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 4,
+    "iteration": 0,
+    "num_two_qubit_gates": 496,
+    "cost": 42,
+    "time": 2.0015270709991455
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 4,
+    "iteration": 1,
+    "num_two_qubit_gates": 496,
+    "cost": 42,
+    "time": 2.0281949043273926
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 4,
+    "iteration": 2,
+    "num_two_qubit_gates": 496,
+    "cost": 42,
+    "time": 2.000901937484741
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 4,
+    "iteration": 3,
+    "num_two_qubit_gates": 496,
+    "cost": 42,
+    "time": 2.0077438354492188
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 32,
+    "num_partitions": 4,
+    "iteration": 4,
+    "num_two_qubit_gates": 496,
+    "cost": 42,
+    "time": 1.9861109256744385
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 4,
+    "iteration": 0,
+    "num_two_qubit_gates": 1128,
+    "cost": 66,
+    "time": 6.139549016952515
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 4,
+    "iteration": 1,
+    "num_two_qubit_gates": 1128,
+    "cost": 66,
+    "time": 6.242246150970459
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 4,
+    "iteration": 2,
+    "num_two_qubit_gates": 1128,
+    "cost": 66,
+    "time": 6.262820243835449
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 4,
+    "iteration": 3,
+    "num_two_qubit_gates": 1128,
+    "cost": 66,
+    "time": 6.28728985786438
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 48,
+    "num_partitions": 4,
+    "iteration": 4,
+    "num_two_qubit_gates": 1128,
+    "cost": 66,
+    "time": 6.316877841949463
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 4,
+    "iteration": 0,
+    "num_two_qubit_gates": 2016,
+    "cost": 90,
+    "time": 13.562395334243774
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 4,
+    "iteration": 1,
+    "num_two_qubit_gates": 2016,
+    "cost": 90,
+    "time": 13.382575988769531
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 4,
+    "iteration": 2,
+    "num_two_qubit_gates": 2016,
+    "cost": 90,
+    "time": 13.252584218978882
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 4,
+    "iteration": 3,
+    "num_two_qubit_gates": 2016,
+    "cost": 90,
+    "time": 13.455824136734009
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 64,
+    "num_partitions": 4,
+    "iteration": 4,
+    "num_two_qubit_gates": 2016,
+    "cost": 90,
+    "time": 13.416685104370117
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 4,
+    "iteration": 0,
+    "num_two_qubit_gates": 3160,
+    "cost": 114,
+    "time": 25.451075077056885
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 4,
+    "iteration": 1,
+    "num_two_qubit_gates": 3160,
+    "cost": 114,
+    "time": 25.9193217754364
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 4,
+    "iteration": 2,
+    "num_two_qubit_gates": 3160,
+    "cost": 114,
+    "time": 25.722080945968628
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 4,
+    "iteration": 3,
+    "num_two_qubit_gates": 3160,
+    "cost": 114,
+    "time": 25.626515865325928
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 80,
+    "num_partitions": 4,
+    "iteration": 4,
+    "num_two_qubit_gates": 3160,
+    "cost": 114,
+    "time": 25.61292791366577
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 4,
+    "iteration": 0,
+    "num_two_qubit_gates": 4560,
+    "cost": 138,
+    "time": 43.93578314781189
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 4,
+    "iteration": 1,
+    "num_two_qubit_gates": 4560,
+    "cost": 138,
+    "time": 43.662988901138306
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 4,
+    "iteration": 2,
+    "num_two_qubit_gates": 4560,
+    "cost": 138,
+    "time": 44.22153997421265
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 4,
+    "iteration": 3,
+    "num_two_qubit_gates": 4560,
+    "cost": 138,
+    "time": 44.19538402557373
+  },
+  {
+    "circuit_type": "QFT",
+    "num_qubits": 96,
+    "num_partitions": 4,
+    "iteration": 4,
+    "num_two_qubit_gates": 4560,
+    "cost": 138,
+    "time": 44.16347599029541
+  }
+]

@@ -1,0 +1,65 @@
+# Benchmark Configuration File
+# Modify these parameters to control benchmark runs
+
+# General settings
+num_iterations: 5  # Number of iterations per configuration
+output_dir: "data"  # Directory for raw JSON results
+num_processes: 5  # Number of parallel processes (set to 1 to disable multiprocessing)
+
+# CP Circuit Benchmarks - Large Scale (2-4 partitions)
+cp_large:
+  enabled: false
+  sizes: [112, 128, 144, 160, 176, 192, 208, 224, 240, 256]  # range(112, 257, 16)
+  num_partitions: [2, 4]
+  fraction: 0.5
+  
+# CP Circuit Benchmarks - Scaling (2-12 partitions)
+cp_scaling:
+  enabled: true
+  sizes: [16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]  # range(16, 97, 8)
+  fractions: [0.3, 0.5, 0.7, 0.9]
+  # num_partitions computed as: 2 + index
+  
+# Standard Circuit Benchmarks (QAOA, QFT, QV)
+standard_circuits:
+  enabled: false
+  sizes: [16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]  # range(16, 97, 8)
+  num_partitions: [2, 4]
+  circuit_types:
+    - "QAOA"
+    - "QFT"
+    - "QV"
+
+# Algorithm parameters
+algorithm:
+  passes_per_level: 10
+  basis_gates: ['u', 'cp']
+  group_gates: true
+  stochastic: true
+  
+# Coarsener Comparison Benchmarks
+coarsener_comparison:
+  enabled: false
+  circuit_type: "cp_fraction"  # Options: cp_fraction, QFT, QV, QAOA
+  sizes: [32, 64]
+  num_partitions: [4]
+  fractions: [0.5]  # Only used for cp_fraction
+  
+# QAOA specific parameters
+qaoa:
+  prob: 0.5
+  reps: 1
+
+# QFT specific parameters
+qft:
+  do_swaps: false
+
+# QASMBench circuit benchmarks
+qasm_circuits:
+  enabled: false  # Set to true to run QASMBench benchmarks
+  qasmbench_path: "QASMBench"  # Path to QASMBench directory
+  category: "large"  # QASMBench category: small, medium, large
+  max_qubits: 50
+  num_partitions: [2, 3, 4]
+  max_depth: 1000  # Skip circuits with depth >= this value
+  skip: {'qft', 'qv', 'QV', 'bv', 'cc', 'bwt'}
