@@ -61,8 +61,6 @@ def hypergraph_to_tikz(
 
     # Build the position map for real (qubit,time) nodes
     space_map = space_mapping(qpu_sizes, depth)
-    print(space_map)
-    print(assignment)
     pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     # If no nodes, handle gracefully
@@ -356,8 +354,6 @@ def hypergraph_to_tikz(
             node1 = list(root_set)[0]
             node2 = list(rec_set)[0]
             if remove_intermediate_roots:
-                print(node2)
-                print(full_root_t_set)
                 if node2 in full_root_t_set and node1[1] == node2[1]:
                     continue
             bend = "[style=edgeStyle, bend left=15]" if node1[0] != node2[0] else "[style=edgeStyle]"
@@ -651,10 +647,10 @@ def hypergraph_to_tikz_v2(
             _, p, pprime = node
             # Example: place them in a single row at y = num_qubits_phys+2
             # and x offset = partition p + some shift
-            print(f"Dummy node: {node}")
+            # print(f"Dummy node: {node}")
             x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2 + x_offset  # scale horizontally by pprime
             y = (-2) * yscale * 0.8
-            print(f"Dummy node position: (x={x}, y={y})")
+            # print(f"Dummy node position: (x={x}, y={y})")
             return (x, y)
         # else:
         #     # If for some reason it's a dummy node of a different shape:
@@ -1487,8 +1483,6 @@ def hypergraph_to_tikz_subgraph(
             node1 = list(root_set)[0]
             node2 = list(rec_set)[0]
             if remove_intermediate_roots:
-                print(node2)
-                print(full_root_t_set)
                 if node2 in full_root_t_set and node1[1] == node2[1]:
                     continue
             

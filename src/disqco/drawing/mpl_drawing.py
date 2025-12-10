@@ -38,8 +38,6 @@ def draw_hypergraph_mpl(
     small_node_scale = node_scale * 0.5
 
     space_map = space_mapping(qpu_sizes, depth)
-    print(space_map)
-    print(assignment)
     pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     if ax is None:

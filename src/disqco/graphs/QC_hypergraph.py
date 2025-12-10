@@ -2,6 +2,7 @@ from collections import defaultdict
 from disqco.utils.qiskit_to_op_list import circuit_to_gate_layers, layer_list_to_dict
 from disqco.graphs.greedy_gate_grouping import group_distributable_packets_sym, group_distributable_packets_asym
 from qiskit import QuantumCircuit
+from qiskit.transpiler.passes import RemoveBarriers
 # from disqco.graphs.quantum_network import QuantumNetwork
 import numpy as np
 
@@ -22,13 +23,14 @@ class QuantumCircuitHyperGraph:
         self.adjacency = defaultdict(set)
         self.node_attrs = {}
         self.hyperedge_attrs = {}
-        self.circuit = circuit
+        self.circuit = RemoveBarriers()(circuit)
         self.num_qubits = circuit.num_qubits
         self.num_qubits_init = self.num_qubits
         self.depth = circuit.depth()
         self.basis_gates = list(circuit.count_ops().keys())
         if map_circuit:
             self.init_from_circuit(group_gates, anti_diag, qpu_sizes=qpu_sizes)
+
 
     def init_from_circuit(self, group_gates=True, anti_diag=False, qpu_sizes=None):
         self.layers = self.extract_layers(group_gates=group_gates, anti_diag=anti_diag, qpu_sizes=qpu_sizes)
@@ -270,6 +272,7 @@ class QuantumCircuitHyperGraph:
         for edge_id, attr_dict in self.hyperedge_attrs.items():
             new_graph.hyperedge_attrs[edge_id] = dict(attr_dict)
 
+
         return new_graph
      
     def map_circuit_to_hypergraph(self,):
@@ -278,11 +281,9 @@ class QuantumCircuitHyperGraph:
         meas_times = defaultdict(set)
         # Times where the qubit participates in any non-measure operation (single- or two-qubit, groups included)
         op_times_non_measure = defaultdict(set)
-        print(layers_dict)
         for l in layers_dict:
             layer = layers_dict[l]
             for gate in layer:
-                print(gate)
                 if gate['type'] == 'measure':
                     qubit = gate['qargs'][0]
                     time = l
