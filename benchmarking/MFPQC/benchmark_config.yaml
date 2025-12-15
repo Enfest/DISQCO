@@ -8,21 +8,21 @@ num_processes: 1 # Number of parallel processes (set to 1 to disable multiproces
 
 # CP Circuit Benchmarks - Large Scale (2-4 partitions)
 cp_large:
-  enabled: true
+  enabled: false
   sizes: [112, 128, 144, 160, 176, 192, 208, 224, 240, 256]  # range(112, 257, 16)
   num_partitions: [2,4]
   fraction: 0.5
   
 # CP Circuit Benchmarks - Scaling (2-12 partitions)
 cp_scaling:
-  enabled: true
+  enabled: false
   sizes: [16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]  # range(16, 97, 8)
   fractions: [0.3, 0.5, 0.7, 0.9]
   # num_partitions computed as: 2 + index
   
 # Standard Circuit Benchmarks (QAOA, QFT, QV)
 standard_circuits:
-  enabled: true
+  enabled: false
   sizes: [16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]  # range(16, 97, 8)
   num_partitions: [2, 4]
   circuit_types:
@@ -59,6 +59,6 @@ qasm_circuits:
   enabled: true  # Set to true to run QASMBench benchmarks
   qasmbench_path: "QASMBench"  # Path to QASMBench directory
   category: "large"  # QASMBench category: small, medium, large
-  num_partitions: [2, 4]
+  num_partitions: [3]
   max_depth: 1000  # Skip circuits with depth >= this value
   skip: {'qft', 'qv', 'QV', 'bwt'}
