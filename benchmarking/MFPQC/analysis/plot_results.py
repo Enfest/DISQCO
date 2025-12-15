@@ -2,223 +2,263 @@
 Plot and analyze benchmark results
 
 This script generates publication-quality plots and summary tables
-from benchmark JSON files.
+from benchmark DAT files.
 """
 
 import os
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
+import subprocess
 from pathlib import Path
 
 
-def load_results(data_dir, pattern):
-    """Load all JSON files matching pattern from data directory."""
-    results = []
-    data_path = Path(data_dir)
+def ensure_dat_files_exist(data_dir, dat_dir):
+    """
+    Check if DAT files exist, and if not, generate them by calling generate_dat_files.py.
     
-    for json_file in data_path.glob(f"*{pattern}*.json"):
-        if "metadata" not in json_file.name:
-            with open(json_file, 'r') as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    results.extend(data)
+    Args:
+        data_dir: Directory containing benchmark JSON files
+        dat_dir: Directory where DAT files should be located
+    """
+    dat_path = Path(dat_dir)
     
-    return results
+    # Check if dat_files directory exists and has files
+    if dat_path.exists() and list(dat_path.glob("*.dat")):
+        print(f"Using existing DAT files from {dat_dir}")
+        return
+    
+    print(f"DAT files not found in {dat_dir}. Generating them now...")
+    
+    # Call generate_dat_files.py script
+    script_path = Path(__file__).parent / "generate_dat_files.py"
+    
+    try:
+        result = subprocess.run(
+            ["python", str(script_path), "--input_dir", data_dir, "--output_dir", dat_dir],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print(result.stdout)
+        print("DAT files generated successfully!")
+    except subprocess.CalledProcessError as e:
+        print(f"Error generating DAT files: {e}")
+        print(e.stderr)
+        raise
 
 
-def plot_cost_vs_qubits(results, output_dir, title="Cost vs Number of Qubits"):
-    """Plot partitioning cost vs number of qubits."""
-    df = pd.DataFrame(results)
+def load_dat_file(filepath):
+    """
+    Load a single DAT file and return as a dictionary.
     
-    if 'num_partitions' in df.columns:
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    Args:
+        filepath: Path to .dat file
         
-        for ax, num_parts in zip(axes, sorted(df['num_partitions'].unique())):
-            subset = df[df['num_partitions'] == num_parts]
-            
-            if 'fraction' in subset.columns:
-                for frac in sorted(subset['fraction'].unique()):
-                    frac_data = subset[subset['fraction'] == frac]
-                    grouped = frac_data.groupby('num_qubits')['mean_cost'].mean()
-                    ax.plot(grouped.index, grouped.values, marker='o', label=f'fraction={frac}')
-            else:
-                grouped = subset.groupby('num_qubits')['mean_cost'].mean()
-                ax.plot(grouped.index, grouped.values, marker='o', linewidth=2)
-            
-            ax.set_xlabel('Number of Qubits')
-            ax.set_ylabel('Mean Communication Cost')
-            ax.set_title(f'{num_parts} Partitions')
-            ax.grid(True, alpha=0.3)
-            if 'fraction' in subset.columns:
-                ax.legend()
+    Returns:
+        Dictionary with column names as keys and lists of values
+    """
+    try:
+        with open(filepath, 'r') as f:
+            lines = f.readlines()
+        
+        if not lines:
+            return None
+        
+        # Parse header
+        header = lines[0].strip().split()
+        
+        # Initialize data dictionary
+        data = {col: [] for col in header}
+        
+        # Parse data lines
+        for line in lines[1:]:
+            if line.strip():
+                values = line.strip().split()
+                for col, val in zip(header, values):
+                    # Try to convert to appropriate type
+                    try:
+                        if '.' in val:
+                            data[col].append(float(val))
+                        else:
+                            data[col].append(int(val))
+                    except ValueError:
+                        data[col].append(val)
+        
+        return data
+    except Exception as e:
+        print(f"Error reading {filepath}: {e}")
+        return None
+
+
+def get_all_dat_files(dat_dir):
+    """Get all DAT files from dat directory."""
+    dat_path = Path(dat_dir)
+    return list(dat_path.glob("*.dat"))
+
+
+def plot_dat_file(dat_file_path, output_dir):
+    """Plot a single DAT file."""
+    data = load_dat_file(dat_file_path)
+    
+    if data is None or not data:
+        return
+    
+    # Determine metric type from filename
+    filename = dat_file_path.stem
+    is_cost = 'cost' in filename
+    is_time = 'time' in filename
+    
+    # Determine x-axis column
+    if 'circuit_name' in data:
+        # QASM files - use circuit_name on x-axis, separate bars for num_partitions
+        x_col = 'circuit_name'
+        x_label = 'Circuit Name'
+        group_col = 'num_partitions'
+    elif 'num_qubits' in data:
+        x_col = 'num_qubits'
+        x_label = 'Number of Qubits'
+        group_col = None
+    elif 'num_partitions' in data:
+        x_col = 'num_partitions'
+        x_label = 'Number of Partitions'
+        group_col = None
     else:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        grouped = df.groupby('num_qubits')['mean_cost'].mean()
-        ax.plot(grouped.index, grouped.values, marker='o', linewidth=2)
-        ax.set_xlabel('Number of Qubits')
-        ax.set_ylabel('Mean Communication Cost')
-        ax.set_title(title)
-        ax.grid(True, alpha=0.3)
+        print(f"Skipping {filename}: No recognizable x-axis column")
+        return
     
-    plt.tight_layout()
-    output_file = os.path.join(output_dir, "cost_vs_qubits.png")
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    print(f"Saved plot: {output_file}")
-    plt.close()
-
-
-def plot_time_vs_qubits(results, output_dir, title="Runtime vs Number of Qubits"):
-    """Plot runtime vs number of qubits."""
-    df = pd.DataFrame(results)
+    # Check for r_mean column
+    if 'r_mean' not in data:
+        print(f"Skipping {filename}: No r_mean column found")
+        return
     
-    if 'num_partitions' in df.columns:
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    if group_col:
+        # Plot grouped bar chart for each group (e.g., num_partitions in QASM files)
+        unique_groups = sorted(set(data[group_col]))
+        unique_x = sorted(set(data[x_col]))
         
-        for ax, num_parts in zip(axes, sorted(df['num_partitions'].unique())):
-            subset = df[df['num_partitions'] == num_parts]
+        # Calculate bar width and positions
+        bar_width = 0.8 / len(unique_groups)
+        x_positions = np.arange(len(unique_x))
+        
+        for i, group_val in enumerate(unique_groups):
+            # Filter data for this group
+            indices = [idx for idx, v in enumerate(data[group_col]) if v == group_val]
             
-            if 'fraction' in subset.columns:
-                for frac in sorted(subset['fraction'].unique()):
-                    frac_data = subset[subset['fraction'] == frac]
-                    grouped = frac_data.groupby('num_qubits')['mean_time'].mean()
-                    ax.plot(grouped.index, grouped.values, marker='o', label=f'fraction={frac}')
+            # Create mapping from unique_x to y_vals
+            x_to_y = {}
+            for idx in indices:
+                x_val = data[x_col][idx]
+                x_to_y[x_val] = {
+                    'y': data['r_mean'][idx],
+                    'ymin': data['r_min'][idx] if 'r_min' in data else None,
+                    'ymax': data['r_max'][idx] if 'r_max' in data else None
+                }
+            
+            # Build y_vals in same order as unique_x
+            y_vals = [x_to_y[x]['y'] for x in unique_x if x in x_to_y]
+            
+            # Calculate error bars if min/max available
+            if 'r_min' in data and 'r_max' in data:
+                r_min_vals = [x_to_y[x]['ymin'] for x in unique_x if x in x_to_y]
+                r_max_vals = [x_to_y[x]['ymax'] for x in unique_x if x in x_to_y]
+                yerr = [[y - ymin for y, ymin in zip(y_vals, r_min_vals)],
+                        [ymax - y for y, ymax in zip(y_vals, r_max_vals)]]
             else:
-                grouped = subset.groupby('num_qubits')['mean_time'].mean()
-                ax.plot(grouped.index, grouped.values, marker='o', linewidth=2)
+                yerr = None
             
-            ax.set_xlabel('Number of Qubits')
-            ax.set_ylabel('Mean Runtime (seconds)')
-            ax.set_title(f'{num_parts} Partitions')
-            ax.grid(True, alpha=0.3)
-            if 'fraction' in subset.columns:
-                ax.legend()
+            label = f"{group_col.replace('num_', '')} = {group_val}"
+            offset = (i - len(unique_groups)/2 + 0.5) * bar_width
+            bar_positions = x_positions[:len(y_vals)] + offset
+            ax.bar(bar_positions, y_vals, bar_width, label=label, yerr=yerr, capsize=3)
+        
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(unique_x, rotation=45, ha='right')
     else:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        grouped = df.groupby('num_qubits')['mean_time'].mean()
-        ax.plot(grouped.index, grouped.values, marker='o', linewidth=2)
-        ax.set_xlabel('Number of Qubits')
-        ax.set_ylabel('Mean Runtime (seconds)')
-        ax.set_title(title)
-        ax.grid(True, alpha=0.3)
+        # Single bar chart
+        x_vals = data[x_col]
+        y_vals = data['r_mean']
+        
+        # Calculate error bars if min/max available
+        if 'r_min' in data and 'r_max' in data:
+            yerr = [[y - ymin for y, ymin in zip(y_vals, data['r_min'])],
+                    [ymax - y for y, ymax in zip(y_vals, data['r_max'])]]
+        else:
+            yerr = None
+        
+        # Use positions for bars
+        x_positions = np.arange(len(x_vals))
+        ax.bar(x_positions, y_vals, yerr=yerr, capsize=3)
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(x_vals)
+    
+    # Set labels and title
+    ax.set_xlabel(x_label)
+    
+    if is_cost:
+        ax.set_ylabel('Entanglement cost')
+        title = filename.replace('_cost', '').replace('_', ' ').title()
+        title += ' - Cost'
+    elif is_time:
+        ax.set_ylabel('Time taken (s)')
+        title = filename.replace('_time', '').replace('_', ' ').title()
+        title += ' - Runtime'
+    else:
+        ax.set_ylabel('Mean Value')
+        title = filename.replace('_', ' ').title()
+    
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    
+    if group_col:
+        ax.legend()
     
     plt.tight_layout()
-    output_file = os.path.join(output_dir, "time_vs_qubits.png")
+    
+    # Save with same name as dat file but as png
+    output_file = os.path.join(output_dir, f"{filename}.png")
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Saved plot: {output_file}")
     plt.close()
 
 
-def plot_circuit_comparison(data_dir, output_dir):
-    """Compare different circuit types."""
-    circuit_types = ["QAOA", "QFT", "QV"]
-    
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    
-    for circuit_type in circuit_types:
-        results = load_results(data_dir, f"means_MLFM-R_{circuit_type}")
-        if not results:
-            continue
-        
-        df = pd.DataFrame(results)
-        
-        # Plot cost comparison
-        for num_parts in sorted(df['num_partitions'].unique()):
-            subset = df[df['num_partitions'] == num_parts]
-            grouped = subset.groupby('num_qubits')['mean_cost'].mean()
-            axes[0].plot(grouped.index, grouped.values, marker='o', label=f'{circuit_type} ({num_parts} parts)')
-        
-        # Plot time comparison
-        for num_parts in sorted(df['num_partitions'].unique()):
-            subset = df[df['num_partitions'] == num_parts]
-            grouped = subset.groupby('num_qubits')['mean_time'].mean()
-            axes[1].plot(grouped.index, grouped.values, marker='o', label=f'{circuit_type} ({num_parts} parts)')
-    
-    axes[0].set_xlabel('Number of Qubits')
-    axes[0].set_ylabel('Mean Communication Cost')
-    axes[0].set_title('Cost Comparison Across Circuit Types')
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
-    
-    axes[1].set_xlabel('Number of Qubits')
-    axes[1].set_ylabel('Mean Runtime (seconds)')
-    axes[1].set_title('Runtime Comparison Across Circuit Types')
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    output_file = os.path.join(output_dir, "circuit_type_comparison.png")
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    print(f"Saved plot: {output_file}")
-    plt.close()
 
-
-def generate_summary_table(results, output_file):
-    """Generate a markdown summary table."""
-    df = pd.DataFrame(results)
-    
-    # Group by configuration and compute statistics
-    group_cols = [col for col in ['circuit_type', 'num_qubits', 'num_partitions', 'fraction'] 
-                  if col in df.columns]
-    
-    if group_cols:
-        summary = df.groupby(group_cols).agg({
-            'mean_cost': ['mean', 'std'],
-            'mean_time': ['mean', 'std']
-        }).round(3)
-        
-        # Save to markdown
-        with open(output_file, 'w') as f:
-            f.write("# Benchmark Results Summary\n\n")
-            f.write(summary.to_markdown())
-            f.write("\n")
-        
-        print(f"Saved summary table: {output_file}")
 
 
 def main():
     """Generate all plots and analysis."""
     data_dir = "../data"
-    output_dir = "../results/plots"
+    dat_dir = "./dat_files"
+    output_dir = "./plots"
     
     os.makedirs(output_dir, exist_ok=True)
     
     print("="*70)
-    print("Generating Benchmark Plots and Analysis")
+    print("Generating Benchmark Plots")
     print("="*70)
     
-    # CP Large Scale plots
-    print("\nProcessing CP Large Scale results...")
-    cp_large_results = load_results(data_dir, "means_MLFM-R_CP_large")
-    if cp_large_results:
-        plot_cost_vs_qubits(cp_large_results, output_dir, "CP Large Scale: Cost vs Qubits")
-        plot_time_vs_qubits(cp_large_results, output_dir, "CP Large Scale: Runtime vs Qubits")
-        generate_summary_table(cp_large_results, os.path.join(output_dir, "../cp_large_summary.md"))
+    # Ensure DAT files exist (generate if needed)
+    ensure_dat_files_exist(data_dir, dat_dir)
     
-    # CP Scaling plots
-    print("\nProcessing CP Scaling results...")
-    cp_scaling_results = load_results(data_dir, "means_MLFM-R_CP_scaling")
-    if cp_scaling_results:
-        plot_cost_vs_qubits(cp_scaling_results, output_dir, "CP Scaling: Cost vs Qubits")
-        plot_time_vs_qubits(cp_scaling_results, output_dir, "CP Scaling: Runtime vs Qubits")
-        generate_summary_table(cp_scaling_results, os.path.join(output_dir, "../cp_scaling_summary.md"))
+    # Get all DAT files
+    dat_files = get_all_dat_files(dat_dir)
     
-    # Circuit comparison plots
-    print("\nProcessing standard circuit comparison...")
-    plot_circuit_comparison(data_dir, output_dir)
+    if not dat_files:
+        print(f"No DAT files found in {dat_dir}")
+        return
     
-    # Individual circuit plots
-    for circuit_type in ["QAOA", "QFT", "QV"]:
-        print(f"\nProcessing {circuit_type} results...")
-        results = load_results(data_dir, f"means_MLFM-R_{circuit_type}")
-        if results:
-            plot_cost_vs_qubits(results, output_dir, f"{circuit_type}: Cost vs Qubits")
-            plot_time_vs_qubits(results, output_dir, f"{circuit_type}: Runtime vs Qubits")
-            generate_summary_table(results, os.path.join(output_dir, f"../{circuit_type.lower()}_summary.md"))
+    print(f"\nFound {len(dat_files)} DAT files to plot")
+    
+    # Plot each DAT file
+    for dat_file in sorted(dat_files):
+        print(f"Processing {dat_file.name}...")
+        plot_dat_file(dat_file, output_dir)
     
     print("\n" + "="*70)
     print(f"All plots saved to: {output_dir}")
+    print(f"Total plots generated: {len(dat_files)}")
     print("="*70)
 
 

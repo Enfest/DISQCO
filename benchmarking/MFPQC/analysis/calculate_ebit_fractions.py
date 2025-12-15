@@ -67,6 +67,25 @@ def calculate_fractions_for_file(filepath):
     }
 
 
+def extract_circuit_type(filename):
+    """
+    Extract circuit type from benchmark filename.
+    
+    Args:
+        filename: Benchmark filename (e.g., 'benchmark_results_MLFM-R_QAOA.json')
+        
+    Returns:
+        Circuit type string (e.g., 'QAOA')
+    """
+    # Remove prefix and suffix
+    name = filename.replace('benchmark_results_', '').replace('.json', '')
+    # Split by underscore and take everything after the method name
+    parts = name.split('_', 1)
+    if len(parts) > 1:
+        return parts[1]
+    return name
+
+
 def process_benchmark_directory(input_dir, output_file):
     """
     Process all JSON files in a directory and generate summary report.
@@ -90,40 +109,75 @@ def process_benchmark_directory(input_dir, output_file):
     
     print(f"Processing {len(json_files)} benchmark files from {input_dir}")
     
-    # Calculate fractions for each file
-    results = {}
+    # Calculate fractions for each file, grouped by circuit type
+    circuit_type_results = defaultdict(list)
+    
     for filepath in sorted(json_files):
         fractions = calculate_fractions_for_file(filepath)
         if fractions:
-            results[filepath.name] = fractions
+            circuit_type = extract_circuit_type(filepath.name)
+            circuit_type_results[circuit_type].append(fractions)
     
-    if not results:
+    if not circuit_type_results:
         print("No valid results to process")
         return
     
+    # Aggregate results by circuit type
+    circuit_type_averages = {}
+    for circuit_type, results_list in circuit_type_results.items():
+        avg_cost = sum(r['cost_fraction'] for r in results_list) / len(results_list)
+        avg_time = sum(r['time_fraction'] for r in results_list) / len(results_list)
+        total_samples = sum(r['num_samples'] for r in results_list)
+        
+        circuit_type_averages[circuit_type] = {
+            'cost_fraction': avg_cost,
+            'time_fraction': avg_time,
+            'num_samples': total_samples,
+            'num_files': len(results_list)
+        }
+    
+    # Calculate overall averages
+    overall_avg_cost = sum(data['cost_fraction'] for data in circuit_type_averages.values()) / len(circuit_type_averages)
+    overall_avg_time = sum(data['time_fraction'] for data in circuit_type_averages.values()) / len(circuit_type_averages)
+    
     # Write results to output file
     with open(output_file, 'w') as f:
-        f.write("Circuit name, Cost fraction, Time fraction, Num samples\n")
+        # Write header
+        f.write("=" * 80 + "\n")
+        f.write("E-bit Fraction Analysis by Circuit Type\n")
+        f.write("=" * 80 + "\n\n")
         
-        cumulative_cost = 0
-        cumulative_time = 0
-        total_samples = 0
+        # Write table header
+        f.write(f"{'Circuit Type':<20} {'Cost Fraction':>15} {'Time Fraction':>15} {'Num Samples':>12}\n")
+        f.write("-" * 80 + "\n")
         
-        for filename, data in results.items():
-            f.write(f"{filename}, {data['cost_fraction']:.6f}, {data['time_fraction']:.6f}, {data['num_samples']}\n")
-            cumulative_cost += data['cost_fraction']
-            cumulative_time += data['time_fraction']
-            total_samples += 1
+        # Write circuit type results (sorted alphabetically)
+        for circuit_type in sorted(circuit_type_averages.keys()):
+            data = circuit_type_averages[circuit_type]
+            f.write(f"{circuit_type:<20} {data['cost_fraction']:>15.6f} {data['time_fraction']:>15.6f} {data['num_samples']:>12}\n")
         
-        # Calculate and write averages
-        avg_cost = cumulative_cost / total_samples
-        avg_time = cumulative_time / total_samples
-        f.write(f"\nAverage, {avg_cost:.6f}, {avg_time:.6f}, {total_samples}\n")
+        # Write separator and average
+        f.write("-" * 80 + "\n")
+        f.write(f"{'Average':<20} {overall_avg_cost:>15.6f} {overall_avg_time:>15.6f} {'':<12}\n")
+        f.write("=" * 80 + "\n")
+    
+    # Print summary to console
+    print(f"\n{'='*80}")
+    print("E-bit Fraction Analysis by Circuit Type")
+    print(f"{'='*80}\n")
+    print(f"{'Circuit Type':<20} {'Cost Fraction':>15} {'Time Fraction':>15} {'Num Samples':>12}")
+    print("-" * 80)
+    
+    for circuit_type in sorted(circuit_type_averages.keys()):
+        data = circuit_type_averages[circuit_type]
+        print(f"{circuit_type:<20} {data['cost_fraction']:>15.6f} {data['time_fraction']:>15.6f} {data['num_samples']:>12}")
+    
+    print("-" * 80)
+    print(f"{'Average':<20} {overall_avg_cost:>15.6f} {overall_avg_time:>15.6f} {'':<12}")
+    print("=" * 80)
     
     print(f"\nResults written to {output_file}")
-    print(f"Average cost fraction: {avg_cost:.6f}")
-    print(f"Average time fraction: {avg_time:.6f}")
-    print(f"Total benchmarks processed: {total_samples}")
+    print(f"Total circuit types processed: {len(circuit_type_averages)}")
 
 
 def main():

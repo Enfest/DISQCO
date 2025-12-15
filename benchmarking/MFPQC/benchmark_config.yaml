@@ -4,13 +4,13 @@
 # General settings
 num_iterations: 10  # Number of iterations per configuration
 output_dir: "data"  # Directory for raw JSON results
-num_processes: 10 # Number of parallel processes (set to 1 to disable multiprocessing)
+num_processes: 1 # Number of parallel processes (set to 1 to disable multiprocessing - will give best times per run but takes longer overall)
 
 # CP Circuit Benchmarks - Large Scale (2-4 partitions)
 cp_large:
   enabled: true
   sizes: [112, 128, 144, 160, 176, 192, 208, 224, 240, 256]  # range(112, 257, 16)
-  num_partitions: [2, 4]
+  num_partitions: [2,4]
   fraction: 0.5
   
 # CP Circuit Benchmarks - Scaling (2-12 partitions)
@@ -59,7 +59,6 @@ qasm_circuits:
   enabled: true  # Set to true to run QASMBench benchmarks
   qasmbench_path: "QASMBench"  # Path to QASMBench directory
   category: "large"  # QASMBench category: small, medium, large
-  max_qubits: 50
-  num_partitions: [2, 3, 4]
+  num_partitions: [2, 4]
   max_depth: 1000  # Skip circuits with depth >= this value
   skip: {'qft', 'qv', 'QV', 'bwt'}

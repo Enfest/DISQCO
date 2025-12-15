@@ -46,7 +46,8 @@ def _run_single_iteration(args):
     start = time.time()
     results = partitioner.multilevel_partition(
         coarsener=recursive_coarsener,
-        passes_per_level=int(passes_per_level)
+        passes_per_level=int(passes_per_level),
+        stochastic=algo_config.get('stochastic', True)
     )
     elapsed = time.time() - start
     

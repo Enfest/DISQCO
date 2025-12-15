@@ -2,8 +2,7 @@
 Generate DAT Files from Benchmark Results
 
 This script processes benchmark JSON files and generates .dat files with
-mean, min, and max values for cost and time metrics. Generates one cost
-file and one time file per unique configuration in the data.
+mean, min, and max values for cost and time metrics.
 
 Usage:
     python generate_dat_files.py --input_dir data --output_dir analysis/dat_files
@@ -17,134 +16,136 @@ from collections import defaultdict
 import numpy as np
 
 
-def process_json_file(filepath, is_scaling=False):
-    """
-    Process a single JSON benchmark file and organize data by configuration.
-    
-    Args:
-        filepath: Path to JSON benchmark results file
-        is_scaling: If True (CP scaling), group by fraction only (num_partitions scales with num_qubits).
-                   If False (other benchmarks), group by num_qubits and fraction.
-        
-    Returns:
-        Dictionary organized by configuration parameters
-    """
-    try:
-        with open(filepath, 'r') as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"Error reading {filepath}: {e}")
-        return None
-    
-    if not data:
-        return None
-    
-    # Organize data by configuration
+def determine_benchmark_type(filename):
+    """Determine the type of benchmark from filename."""
+    name_lower = filename.lower()
+    if 'scaling' in name_lower:
+        return 'scaling'
+    elif 'qasm' in name_lower:
+        return 'qasm'
+    else:
+        return 'standard'
+
+
+def process_scaling_benchmark(data):
+    """Process CP scaling benchmarks - group by fraction, x-axis is num_qubits."""
     configs = defaultdict(lambda: defaultdict(list))
     
     for entry in data:
-        if is_scaling:
-            # For CP scaling: group by fraction only, x-axis is num_qubits
-            fraction = entry.get('fraction')
-            config_key = ('fraction', fraction)
-            num_qubits = entry['num_qubits']
-            
-            # Store cost and time for this qubit size
-            if 'cost' in entry:
-                configs[config_key][num_qubits].append(entry['cost'])
-            if 'time' in entry:
-                configs[config_key][('time', num_qubits)].append(entry['time'])
-        else:
-            # For other benchmarks: group by fraction and num_qubits, x-axis is num_partitions
-            fraction = entry.get('fraction')
-            num_qubits = entry.get('num_qubits')
-            num_partitions = entry.get('num_partitions')
-            config_key = ('fraction', fraction, 'num_qubits', num_qubits)
-            
-            # Store cost and time for this partition count
-            if 'cost' in entry:
-                configs[config_key][num_partitions].append(entry['cost'])
-            if 'time' in entry:
-                configs[config_key][('time', num_partitions)].append(entry['time'])
+        fraction = entry.get('fraction')
+        num_qubits = entry['num_qubits']
+        
+        config_key = f"fraction_{fraction}"
+        
+        if 'cost' in entry:
+            configs[config_key][('cost', num_qubits)].append(entry['cost'])
+        if 'time' in entry:
+            configs[config_key][('time', num_qubits)].append(entry['time'])
     
     return configs
 
 
-def write_dat_file(output_path, data_dict, metric_name='cost', x_axis='num_qubits'):
-    """
-    Write a .dat file with mean, min, max values.
+def process_qasm_benchmark(data, base_name):
+    """Process QASM benchmarks - single file with circuit_name, num_qubits and num_partitions."""
+    configs = defaultdict(lambda: defaultdict(list))
     
-    Args:
-        output_path: Path to output .dat file
-        data_dict: Dictionary mapping x-axis values to list of values
-        metric_name: Name of the metric (for column naming)
-        x_axis: Name of the x-axis column ('num_qubits' or 'num_partitions')
-    """
-    # Get sorted list of x-axis values
-    x_values = sorted([k for k in data_dict.keys() if isinstance(k, int)])
+    config_key = base_name  # Use base name as config key
     
-    if not x_values:
+    for entry in data:
+        circuit_name = entry.get('circuit_name', 'unknown')
+        num_qubits = entry.get('num_qubits')
+        num_partitions = entry.get('num_partitions')
+        
+        if 'cost' in entry:
+            configs[config_key][('cost', circuit_name, num_qubits, num_partitions)].append(entry['cost'])
+        if 'time' in entry:
+            configs[config_key][('time', circuit_name, num_qubits, num_partitions)].append(entry['time'])
+    
+    return configs
+
+
+def process_standard_benchmark(data):
+    """Process standard benchmarks (QAOA, QFT, QV, CP_large) - group by num_partitions, x-axis is num_qubits."""
+    configs = defaultdict(lambda: defaultdict(list))
+    
+    for entry in data:
+        num_qubits = entry.get('num_qubits')
+        num_partitions = entry.get('num_partitions')
+        
+        config_key = f"{num_partitions}partitions"
+        
+        if 'cost' in entry:
+            configs[config_key][('cost', num_qubits)].append(entry['cost'])
+        if 'time' in entry:
+            configs[config_key][('time', num_qubits)].append(entry['time'])
+    
+    return configs
+
+
+def write_standard_dat_file(output_path, data_dict, metric_name):
+    """Write a standard .dat file with num_qubits as x-axis."""
+    # Get sorted list of qubit values
+    qubit_values = sorted(set(k[1] for k in data_dict.keys() if k[0] == metric_name))
+    
+    if not qubit_values:
         return
     
     with open(output_path, 'w') as f:
         # Write header
-        prefix = metric_name[0] if metric_name else 'r'
-        f.write(f"{x_axis} {prefix}_mean {prefix}_min {prefix}_max\n")
+        prefix = 'r'
+        f.write(f"num_qubits {prefix}_mean {prefix}_min {prefix}_max\n")
         
-        # Write data for each x value
-        for x_val in x_values:
-            values = data_dict[x_val]
-            
-            if not values:
-                continue
-            
-            mean_val = np.mean(values)
-            min_val = np.min(values)
-            max_val = np.max(values)
-            
-            # Format based on metric type
-            if metric_name == 'time':
-                f.write(f"{x_val} {mean_val:.4f} {min_val:.4f} {max_val:.4f}\n")
-            else:
-                f.write(f"{x_val} {mean_val:.1f} {min_val:.1f} {max_val:.1f}\n")
+        # Write data for each qubit value
+        for num_qubits in qubit_values:
+            key = (metric_name, num_qubits)
+            if key in data_dict:
+                values = data_dict[key]
+                
+                if not values:
+                    continue
+                
+                mean_val = np.mean(values)
+                min_val = np.min(values)
+                max_val = np.max(values)
+                
+                # Format based on metric type
+                if metric_name == 'time':
+                    f.write(f"{num_qubits} {mean_val:.4f} {min_val:.4f} {max_val:.4f}\n")
+                else:
+                    f.write(f"{num_qubits} {mean_val:.1f} {min_val:.1f} {max_val:.1f}\n")
 
 
-def generate_filename_from_config(config_tuple, base_name, metric, is_scaling=False):
-    """
-    Generate a descriptive filename from configuration parameters.
+def write_qasm_dat_file(output_path, data_dict, metric_name):
+    """Write a QASM .dat file with num_qubits and num_partitions."""
+    # Get all (circuit_name, num_qubits, num_partitions) combinations
+    combinations = sorted(set((k[1], k[2], k[3]) for k in data_dict.keys() if k[0] == metric_name))
     
-    Args:
-        config_tuple: Tuple of configuration parameters
-        base_name: Base name from the JSON file
-        metric: 'cost' or 'time'
-        is_scaling: If True (CP scaling), use fraction only in filename
+    if not combinations:
+        return
+    
+    with open(output_path, 'w') as f:
+        # Write header
+        prefix = 'r'
+        f.write(f"circuit_name num_qubits num_partitions {prefix}_mean {prefix}_min {prefix}_max\n")
         
-    Returns:
-        Filename string
-    """
-    config_dict = dict(zip(config_tuple[::2], config_tuple[1::2]))
-    
-    parts = []
-    
-    if is_scaling:
-        # For CP scaling: fraction_X_{cost/time}.dat
-        if config_dict.get('fraction') is not None:
-            parts.append(f"fraction_{config_dict['fraction']}")
-    else:
-        # For other benchmarks: Xq_fraction_Y_{cost/time}.dat
-        if config_dict.get('num_qubits') is not None:
-            parts.append(f"{config_dict['num_qubits']}q")
-        if config_dict.get('fraction') is not None:
-            parts.append(f"fraction_{config_dict['fraction']}")
-    
-    # If no specific params, use base name
-    if not parts:
-        parts.append(base_name.replace('benchmark_results_MLFM-R_', '').replace('.json', ''))
-    
-    # Add metric
-    parts.append(metric)
-    
-    return "_".join(parts) + ".dat"
+        # Write data for each combination
+        for circuit_name, num_qubits, num_partitions in combinations:
+            key = (metric_name, circuit_name, num_qubits, num_partitions)
+            if key in data_dict:
+                values = data_dict[key]
+                
+                if not values:
+                    continue
+                
+                mean_val = np.mean(values)
+                min_val = np.min(values)
+                max_val = np.max(values)
+                
+                # Format based on metric type
+                if metric_name == 'time':
+                    f.write(f"{circuit_name} {num_qubits} {num_partitions} {mean_val:.4f} {min_val:.4f} {max_val:.4f}\n")
+                else:
+                    f.write(f"{circuit_name} {num_qubits} {num_partitions} {mean_val:.1f} {min_val:.1f} {max_val:.1f}\n")
 
 
 def process_benchmark_directory(input_dir, output_dir):
@@ -172,42 +173,59 @@ def process_benchmark_directory(input_dir, output_dir):
     
     total_dat_files = 0
     
-    for json_file in json_files:
+    for json_file in sorted(json_files):
         print(f"\nProcessing {json_file.name}...")
         
-        # Determine if this is a scaling benchmark
-        is_scaling = 'scaling' in json_file.name.lower()
+        # Load data
+        try:
+            with open(json_file, 'r') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"  Error reading {json_file}: {e}")
+            continue
         
-        configs = process_json_file(json_file, is_scaling=is_scaling)
-        
-        if not configs:
+        if not data:
             print(f"  Skipped: no valid data")
             continue
         
-        base_name = json_file.stem
+        # Determine benchmark type
+        benchmark_type = determine_benchmark_type(json_file.name)
+        base_name = json_file.stem.replace('benchmark_results_MLFM-R_', '')
         
-        # Determine x-axis based on benchmark type
-        x_axis = 'num_qubits' if is_scaling else 'num_partitions'
+        # Process based on type
+        if benchmark_type == 'scaling':
+            configs = process_scaling_benchmark(data)
+        elif benchmark_type == 'qasm':
+            configs = process_qasm_benchmark(data, base_name)
+        else:
+            configs = process_standard_benchmark(data)
         
-        # Process each configuration
-        for config_key, data in configs.items():
-            # Separate cost and time data
-            cost_data = {k: v for k, v in data.items() if not isinstance(k, tuple)}
-            time_data = {k[1]: v for k, v in data.items() if isinstance(k, tuple) and k[0] == 'time'}
-            
-            # Generate cost .dat file
-            if cost_data:
-                cost_filename = generate_filename_from_config(config_key, base_name, 'cost', is_scaling=is_scaling)
+        # Generate DAT files for each configuration
+        for config_key, data_dict in configs.items():
+            if benchmark_type == 'qasm':
+                # QASM: Create one cost and one time file
+                cost_filename = f"{config_key}_cost.dat"
                 cost_path = output_path / cost_filename
-                write_dat_file(cost_path, cost_data, 'cost', x_axis=x_axis)
+                write_qasm_dat_file(cost_path, data_dict, 'cost')
                 print(f"  Created: {cost_filename}")
                 total_dat_files += 1
-            
-            # Generate time .dat file
-            if time_data:
-                time_filename = generate_filename_from_config(config_key, base_name, 'time', is_scaling=is_scaling)
+                
+                time_filename = f"{config_key}_time.dat"
                 time_path = output_path / time_filename
-                write_dat_file(time_path, time_data, 'time', x_axis=x_axis)
+                write_qasm_dat_file(time_path, data_dict, 'time')
+                print(f"  Created: {time_filename}")
+                total_dat_files += 1
+            else:
+                # Standard and scaling: Create separate cost and time files
+                cost_filename = f"{base_name}_{config_key}_cost.dat"
+                cost_path = output_path / cost_filename
+                write_standard_dat_file(cost_path, data_dict, 'cost')
+                print(f"  Created: {cost_filename}")
+                total_dat_files += 1
+                
+                time_filename = f"{base_name}_{config_key}_time.dat"
+                time_path = output_path / time_filename
+                write_standard_dat_file(time_path, data_dict, 'time')
                 print(f"  Created: {time_filename}")
                 total_dat_files += 1
     

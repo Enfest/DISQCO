@@ -65,21 +65,24 @@ def _run_single_iteration(args):
     }
 
 
-def run_qasm_benchmark_50(config, output_dir, qasmbench_path="QASMBench"):
+def run_qasm_benchmark_50(config, output_dir, qasmbench_path="../QASMBench"):
     """
     Run benchmarks for QASMBench circuits.
     
     Args:
         config: Configuration dictionary
         output_dir: Directory to save results
-        qasmbench_path: Path to QASMBench directory
+        qasmbench_path: Path to QASMBench directory (relative to MFPQC directory)
     """
     try:
         import sys
-        sys.path.append(f'./')
+        # Add parent benchmarking directory to path for QASMBench import
+        benchmarking_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        if benchmarking_dir not in sys.path:
+            sys.path.insert(0, benchmarking_dir)
         from QASMBench.interface.qiskit import QASMBenchmark
     except ImportError:
-        print("Error: QASMBench not found. Please install QASMBench.")
+        print("Error: QASMBench not found. Please install QASMBench or fix the path.")
         print("Clone from: https://github.com/pnnl/QASMBench")
         return
     
@@ -94,9 +97,22 @@ def run_qasm_benchmark_50(config, output_dir, qasmbench_path="QASMBench"):
     max_qubits = 50
     max_depth = qasm_config.get('max_depth', 1000)
     
-    # Initialize QASMBenchmark
+    # Initialize QASMBenchmark with absolute path
+    # If qasmbench_path is already absolute, use it; otherwise resolve relative to benchmarking root
+    if os.path.isabs(qasmbench_path):
+        qasm_abs_path = qasmbench_path
+    else:
+        # Go from scripts/ -> MFPQC/ -> benchmarking/ -> QASMBench/
+        qasm_abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..', qasmbench_path))
+    print(f"Loading QASMBench from: {qasm_abs_path}")
+    
+    if not os.path.exists(qasm_abs_path):
+        print(f"Error: QASMBench directory not found at {qasm_abs_path}")
+        print("Please check the qasmbench_path in your configuration.")
+        return
+    
     bm = QASMBenchmark(
-        qasmbench_path,
+        qasm_abs_path,
         category,
         num_qubits_list=list(range(min_qubits,max_qubits)),
         do_transpile=True,
@@ -107,8 +123,8 @@ def run_qasm_benchmark_50(config, output_dir, qasmbench_path="QASMBench"):
     circ_name_list = bm.circ_name_list
     print(f"Found {len(circ_name_list)} circuits in QASMBench category '{category}' with up to {max_qubits} qubits.")
     
-    detailed_filename = os.path.join(output_dir, f"benchmark_results_MLFM-R_QASM_{category}.json")
-    means_filename = os.path.join(output_dir, f"benchmark_means_MLFM-R_QASM_{category}.json")
+    detailed_filename = os.path.join(output_dir, f"benchmark_results_MLFM-R_QASM_{category}_{max_qubits}.json")
+    means_filename = os.path.join(output_dir, f"benchmark_means_MLFM-R_QASM_{category}_{max_qubits}.json")
     
     # Load existing results if available
     detailed_results = []
@@ -234,4 +250,4 @@ if __name__ == "__main__":
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     # Run benchmark
-    run_qasm_benchmark(config, args.output_dir)
+    run_qasm_benchmark_50(config, args.output_dir)
