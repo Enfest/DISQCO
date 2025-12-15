@@ -41,8 +41,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-benchmarking/QASM_bench
-Demos/QASM_bench
+benchmarking/QASMBench
+Demos/QASMBench
 
 # Benchmarking data files (raw results - not committed)
 benchmarking/data/*.json
