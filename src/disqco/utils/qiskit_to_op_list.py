@@ -1,5 +1,6 @@
 from qiskit.converters import circuit_to_dag
 from qiskit.dagcircuit.dagnode import DAGOpNode
+from qiskit.transpiler.passes import RemoveBarriers
 
 def get_reg_mapping(circuit):
     qubit_indeces = {}
@@ -26,6 +27,8 @@ def get_clbit_mapping(circuit):
 
 def circuit_to_gate_layers(circuit, qpu_sizes = None):
     "Uses qiskit DAG circuit to group gates into sublists by layer/timestep of the circuit"
+    # Remove barriers to avoid empty layers
+    circuit = RemoveBarriers()(circuit)
     dag = circuit_to_dag(circuit)
     layers = list(dag.multigraph_layers())
     layer_gates = []
@@ -39,7 +42,6 @@ def circuit_to_gate_layers(circuit, qpu_sizes = None):
         for node in layer:
             if isinstance(node, DAGOpNode):
                 # Print all info in DAGOpNode
-                # debug prints removed
                 gate_name = node.name
                 qubits = [qubit_mapping[(qubit._register.name,qubit._index)] for qubit in node.qargs]
                 registers = [qubit._register.name for qubit in node.qargs]
@@ -49,7 +51,6 @@ def circuit_to_gate_layers(circuit, qpu_sizes = None):
                 meta = {}
                 # DAGOpNode exposes classical args via `cargs`
                 cargs = getattr(node, 'cargs', []) or []
-                # debug prints removed
                 if cargs:
                     try:
                         cargs_idx = [clbit_mapping[(bit._register.name, bit._index)] for bit in cargs]
@@ -64,10 +65,8 @@ def circuit_to_gate_layers(circuit, qpu_sizes = None):
                 cond = getattr(node, 'condition', None)
                 if cond is None:
                     cond = getattr(node.op, 'condition', None)
-                # debug prints removed
                 if cond is not None:
                     try:
-                        # debug prints removed
                         cond_lhs, cond_val = cond
                         # Duck-typing: if object has 'size' treat as register, otherwise treat as single bit
                         if hasattr(cond_lhs, 'size') and getattr(cond_lhs, 'size') is not None:
@@ -75,7 +74,6 @@ def circuit_to_gate_layers(circuit, qpu_sizes = None):
                             reg_name = getattr(cond_lhs, 'name', None)
                             meta['cond_register'] = reg_name
                             meta['cond_val'] = int(cond_val)
-                            # debug prints removed
                             # Derive a single controlling bit when possible:
                             # - If the register is size 1, it's that bit
                             # - If cond_val is a power of two within register size, use that bit position
@@ -94,7 +92,6 @@ def circuit_to_gate_layers(circuit, qpu_sizes = None):
                             # except Exception:
                             #     pass
                         elif isinstance(cond_lhs, (list, tuple)) and len(cond_lhs) > 0:
-                            # debug prints removed
                             # Some DAGs carry a list/tuple of Clbits for the LHS
                             try:
                                 bits = []
@@ -124,7 +121,6 @@ def circuit_to_gate_layers(circuit, qpu_sizes = None):
                                 pass
                         else:
                             # Assume a single classical bit with _register and _index
-                            # debug prints removed
                             bit_reg = getattr(cond_lhs, '_register', None)
                             bit_idx = getattr(cond_lhs, '_index', None)
                             if bit_reg is not None and bit_idx is not None:
@@ -197,8 +193,6 @@ def layer_list_to_dict(layers):
             params = gate[3]
             # Extract optional meta dict if present (used for measurement cargs and classical controls)
             meta = gate[4] if (len(gate) >= 5 and isinstance(gate[4], dict)) else {}
-            # debug prints removed
-
             # Skip barriers only; include measurements and resets
             if name == 'barrier':
                 continue

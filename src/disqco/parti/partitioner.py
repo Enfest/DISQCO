@@ -1,5 +1,5 @@
 from qiskit import QuantumCircuit
-from disqco.graphs.quantum_network import QuantumNetwork
+from disqco import QuantumNetwork
 import numpy as np
 
 # Circuit partitioner base class
@@ -23,15 +23,62 @@ class QuantumCircuitPartitioner:
         self.circuit = circuit
         self.network = network
         self.initial_assignment = initial_assignment
+    
+    @classmethod
+    def create(cls, partitioner_type: str, circuit: QuantumCircuit, 
+               network: QuantumNetwork, **kwargs):
+        """
+        Factory method to create a partitioner instance based on a string type.
+        
+        Args:
+            partitioner_type: String specifying the partitioner type.
+                Supported values:
+                - 'fm', 'fiduccia', 'fiducciamattheyses': FiducciaMattheyses
+                - 'genetic', 'ga': GeneticPartitioner
+                - 'fgp': FGPPartitioner
+            circuit: The quantum circuit to be partitioned.
+            network: The quantum network topology.
+            **kwargs: Additional arguments passed to the partitioner constructor.
+        
+        Returns:
+            An instance of the specified partitioner class.
+        
+        Raises:
+            ValueError: If partitioner_type is not recognized.
+        
+        Example:
+            >>> from disqco.parti import QuantumCircuitPartitioner
+            >>> partitioner = QuantumCircuitPartitioner.create('fm', circuit, network)
+        """
+        partitioner_type_lower = partitioner_type.lower()
+        
+        if partitioner_type_lower in ['fm', 'fiduccia', 'fiducciamattheyses']:
+            from disqco.parti import FiducciaMattheyses
+            return FiducciaMattheyses(circuit, network, **kwargs)
+        
+        elif partitioner_type_lower in ['genetic', 'ga']:
+            from disqco.parti.genetic.genetic_algorithm_beta import GeneticPartitioner
+            return GeneticPartitioner(circuit, network, **kwargs)
+        
+        elif partitioner_type_lower in ['fgp']:
+            from disqco.parti.fgp.fgp_partitioner import FGPPartitioner
+            return FGPPartitioner(circuit, network, **kwargs)
+        
+        else:
+            raise ValueError(
+                f"Unknown partitioner type: '{partitioner_type}'. "
+                f"Supported types: 'fm', 'fiduccia', 'fiducciamattheyses', "
+                f"'genetic', 'ga', 'fgp'"
+            )
+    
 
-    def partition(self, **kwargs) -> list:
+    def partition(self, **kwargs) -> dict:
         """
         Partition the quantum circuit using the specified strategy.
 
         Returns:
             A list of partitions.
         """
-
         partitioner = kwargs.get('partitioner')
         hypergraph_coarsener = kwargs.pop('hypergraph_coarsener', None)
         if hypergraph_coarsener is not None:
@@ -75,7 +122,7 @@ class QuantumCircuitPartitioner:
         graph_list = graph_list[:level_limit]
         mapping_list = mapping_list[:level_limit]
         passes_per_level = kwargs.get('passes_per_level', 10)
-        pass_list = [passes_per_level] * level_limit
+        pass_list = [passes_per_level] * (level_limit)
 
         
 
@@ -86,7 +133,7 @@ class QuantumCircuitPartitioner:
             kwargs['active_nodes'] = graph.nodes
             kwargs['assignment'] = assignment
             kwargs['mapping'] = mapping_list[i]
-            kwargs['limit'] = self.num_qubits
+            kwargs['limit'] = kwargs.get('limit', 0.75 * self.hypergraph.num_qubits)
             kwargs['passes'] = pass_list[i]
             results = self.partition(**kwargs)
 

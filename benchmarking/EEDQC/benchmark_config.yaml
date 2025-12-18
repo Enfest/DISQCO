@@ -1,0 +1,44 @@
+# EEDQC Benchmark Configuration File
+# Energy-Efficient Distributed Quantum Computing Paper
+# Heterogeneous network partitioning benchmarks
+
+# General settings
+num_iterations: 5  # Number of iterations per configuration
+output_dir: "data"  # Directory for raw JSON results
+num_processes: 4  # Number of parallel processes (set to 1 to disable multiprocessing)
+
+# CP Circuit Benchmarks with Heterogeneous Networks
+cp_hetero:
+  enabled: true
+  sizes: [112, 128, 144, 160, 176, 192, 208, 224, 240, 256]  # range(112, 257, 16)
+  num_partitions: [4, 6, 8]
+  fraction: 0.5
+  network_types: ['linear', 'grid', 'random']  # Heterogeneous network topologies
+
+# QASMBench Benchmarks with Heterogeneous Networks
+qasm_hetero:
+  enabled: false
+  qasmbench_path: "../QASMBench"  # Path to QASMBench directory
+  category: "large"  # QASMBench category: small, medium, large
+  max_qubits: 100
+  num_partitions: [6, 8]
+  network_types: ['linear', 'grid']
+  max_depth: 1000  # Skip circuits with depth >= this value
+  skip: ['qft', 'qv', 'QV', 'bv', 'cc', 'bwt']
+
+# Net-Coarsened Partitioning Benchmarks
+net_coarsened:
+  enabled: false
+  circuit_types: ['cp_fraction', 'QFT', 'QV']
+  sizes: [64, 96, 128, 160, 192]
+  num_qpus: [8, 16, 32]  # Number of QPUs in network
+  network_types: ['linear', 'grid', 'random']
+  coarsening_factors: [2, 4]  # Network coarsening factors
+  use_multiprocessing: true  # Use multiprocessing within net-coarsened FM
+
+# Algorithm parameters
+algorithm:
+  passes_per_level: 10
+  basis_gates: ['u', 'cp']
+  group_gates: true
+  stochastic: true

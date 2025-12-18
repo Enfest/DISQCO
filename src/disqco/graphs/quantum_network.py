@@ -4,7 +4,6 @@ from collections import deque
 from networkx.algorithms.approximation import steiner_tree
 from networkx import erdos_renyi_graph
 import math as mt
-from disqco.graphs.hypergraph_methods import map_hedge_to_configs, get_all_configs, config_to_cost
 
 # Quantumn Network Class
 # This class is used to create a quantum network with multiple QPUs
@@ -41,6 +40,80 @@ class QuantumNetwork():
             else:
                 self.comm_sizes = comm_sizes
 
+    @classmethod
+    def create(cls, qpu_sizes, coupling_type='all_to_all', comm_sizes=None, **kwargs):
+        """
+        Factory method to create a QuantumNetwork with a specific coupling type.
+        
+        Args:
+            qpu_sizes: List or dict of QPU sizes
+            coupling_type: String specifier for network topology. Options:
+                - 'all_to_all' or 'complete': Fully connected network (default)
+                - 'linear': Linear chain topology
+                - 'grid': Grid topology
+                - 'random': Random coupling with edge probability p
+                - 'tree': Tree topology with branching factor k
+                - 'network_of_grids': Network of grid components connected by linear paths
+            comm_sizes: Optional communication sizes for QPUs
+            **kwargs: Additional arguments for specific coupling types:
+                - p: Edge probability for random coupling (default 0.5)
+                - k: Branching factor for tree topology (default 2)
+                - num_grids: Number of grids for network_of_grids
+                - nodes_per_grid: Nodes per grid for network_of_grids
+                - l: Path length between grids for network_of_grids
+                
+        Returns:
+            QuantumNetwork instance with specified coupling
+            
+        Examples:
+            >>> # Create all-to-all network
+            >>> network = QuantumNetwork.create([8, 8, 8, 8], 'all_to_all')
+            >>> # Create linear network
+            >>> network = QuantumNetwork.create([8, 8, 8, 8], 'linear')
+            >>> # Create grid network
+            >>> network = QuantumNetwork.create([4]*16, 'grid')
+            >>> # Create random network with p=0.6
+            >>> network = QuantumNetwork.create([8]*8, 'random', p=0.6)
+        """
+        # Determine number of QPUs
+        if isinstance(qpu_sizes, list):
+            num_qpus = len(qpu_sizes)
+        else:
+            num_qpus = len(qpu_sizes)
+        
+        # Normalize coupling_type string
+        coupling_type = coupling_type.lower().replace('_', '').replace('-', '')
+        
+        # Generate connectivity based on type
+        if coupling_type in ['alltoall', 'complete', 'fullyconnected']:
+            connectivity = all_to_all(num_qpus)
+        elif coupling_type == 'linear':
+            connectivity = linear_coupling(num_qpus)
+        elif coupling_type == 'grid':
+            connectivity = grid_coupling(num_qpus)
+        elif coupling_type == 'random':
+            p = kwargs.get('p', 0.5)
+            connectivity = random_coupling(num_qpus, p)
+        elif coupling_type == 'tree':
+            k = kwargs.get('k', 2)
+            connectivity = tree_network(num_qpus, k)
+        elif coupling_type == 'networkofgrids':
+            num_grids = kwargs.get('num_grids')
+            nodes_per_grid = kwargs.get('nodes_per_grid')
+            l = kwargs.get('l')
+            if num_grids is None or nodes_per_grid is None or l is None:
+                raise ValueError(
+                    "network_of_grids requires 'num_grids', 'nodes_per_grid', and 'l' parameters"
+                )
+            connectivity = network_of_grids(num_grids, nodes_per_grid, l)
+        else:
+            raise ValueError(
+                f"Unknown coupling type: '{coupling_type}'. "
+                f"Valid options are: 'all_to_all', 'linear', 'grid', 'random', 'tree', 'network_of_grids'"
+            )
+        
+        return cls(qpu_sizes, qpu_connectivity=connectivity, comm_sizes=comm_sizes)
+
     def create_qpu_graph(self):
         qpu_graph = nx.Graph()
         for qpu, qpu_size in self.qpu_sizes.items():
@@ -50,9 +123,22 @@ class QuantumNetwork():
         return qpu_graph
     
     def draw(self,):
-        node_sizes = [20*self.qpu_graph.nodes[i]['size'] for i in self.qpu_graph.nodes]
-        node_colors = [self.qpu_graph.nodes[i]['color'] if 'color' in self.qpu_graph.nodes[i] else 'green' for i in self.qpu_graph.nodes]
-        nx.draw(self.qpu_graph, with_labels=True, node_size=node_sizes, node_color=node_colors)
+        num_nodes = len(self.qpu_graph.nodes)
+        # Scale node size based on number of nodes
+        base_size = max(100, 2000 / num_nodes)
+        node_sizes = [base_size * self.qpu_graph.nodes[i]['size'] for i in self.qpu_graph.nodes]
+        # Use royalblue for active nodes (default), or custom color if specified
+        node_colors = [
+            self.qpu_graph.nodes[i]['color'] if 'color' in self.qpu_graph.nodes[i] else 'royalblue' 
+            for i in self.qpu_graph.nodes
+        ]
+        # Create labels with LaTeX formatting
+        labels = {i: f"$Q_{{{i}}}$" for i in self.qpu_graph.nodes}
+        # Scale font size based on number of nodes
+        font_size = max(8, min(16, 120 / num_nodes))
+        nx.draw(self.qpu_graph, with_labels=True, labels=labels, 
+                node_size=node_sizes, node_color=node_colors,
+                edgecolors='k', linewidths=1, font_weight='bold', font_size=font_size)
         plt.show()
 
     def multi_source_bfs(self, roots, receivers):
@@ -399,3 +485,36 @@ def tree_network(N, k=2):
         raise ValueError("Not enough edges to connect all nodes in the tree network.")
  
     return edges
+
+def get_all_configs(num_partitions : int, hetero = False, sparse = False) -> list[set[int]]:
+    """
+    Generates all possible configurations for a given number of partitions."
+    """
+    # Each configuration is represented as a tuple of 0s and 1s, where 1 indicates
+    # that at least one qubit in the edge is assigned to the current partition.
+    from itertools import product
+    configs = set(product((0,1),repeat=num_partitions))
+    if hetero:
+        configs = configs - {tuple([0]*num_partitions)}
+    
+    if sparse:
+        configs_sets = set()
+        for config in list(configs):
+            config_set = set([idx for idx, val in enumerate(config) if val == 1])
+            configs_sets.add(config_set)
+        configs = configs_sets
+
+    return list(configs)
+
+def config_to_cost(config : tuple[int], costs : dict[tuple[int], int] | None = None) -> int:
+    """
+    Converts a configuration tuple to its corresponding cost (assuming all to all connectivity)."
+    """
+    cost = 0
+    for element in config:
+        if element == 1:
+            cost += 1
+    if costs is not None:
+        costs[tuple(config)] = cost
+        
+    return cost
