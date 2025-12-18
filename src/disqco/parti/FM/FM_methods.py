@@ -79,29 +79,6 @@ def set_initial_partitions_dict(network : QuantumNetwork, num_qubits : int, dept
     
     return partition_assignment
 
-# def find_spaces(num_qubits: int, depth: int, assignment : np.ndarray, qpu_sizes: dict[int, int], graph : QuantumCircuitHyperGraph | None = None) -> dict[int, int]:
-#     """
-#     Find the number of free qubits in each partition at each time step.
-#     num_qubits: number of logical qubits in the circuit
-#     assignment: function that maps qubits to partitions
-#     network: quantum network object
-#     """
-#     spaces = {}
-
-#     for t in range(depth):
-#         if isinstance(qpu_sizes, dict):
-#             keys = list(sorted(qpu_sizes.keys()))
-#             spaces[t] = [qpu_sizes[k] for k in keys]
-#         else:
-#             spaces[t] = [size for size in qpu_sizes]
-
-#         for q in range(num_qubits):
-#             # spaces[t][assignment[(q,t)]] -= 1
-#             spaces[t][assignment[t][q]] -= 1
-
-    
-#     return spaces
-
 def find_spaces(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : QuantumCircuitHyperGraph) -> dict[int, int]:
     """
     Find the number of free qubits in each partition at each time step.
@@ -115,8 +92,6 @@ def find_spaces(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : Quan
     for t in range(depth):
         spaces[t] = {qpu : value for qpu, value in qpu_sizes.items()}
 
-    
-
     if graph is not None:
         for node in graph.nodes:
             if node[0] == 'dummy':
@@ -125,7 +100,6 @@ def find_spaces(assignment : np.ndarray, qpu_sizes: dict[int, int], graph : Quan
             part = assignment[t][q]
             spaces[t][part] -= 1
 
-    print(f'Spaces: {spaces}')
     return spaces
 
 def check_valid(node : tuple[int,int], destination: int, spaces: dict[int, int]) -> bool:
@@ -894,7 +868,6 @@ def set_initial_sub_partitions(sub_network : QuantumNetwork, node_list : list[li
         
     
     return assignment
-
 
 def refine_assignment(level, num_levels, assignment, mapping_list):
     new_assignment = assignment
