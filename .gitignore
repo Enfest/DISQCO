@@ -41,15 +41,16 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-<<<<<<< HEAD
 *QASM_bench/
 *QASMBench/
 Demos/beta/QASMBench/
 
-*__pycache__/
+__pycache__/
+.vscode/
+
+.pytest_cache/
 
 Demos/beta/graphs/
-=======
 benchmarking/QASMBench
 Demos/QASMBench
 
@@ -72,4 +73,3 @@ benchmarking/*.dat
 *.png
 
 benchmarking/old/
->>>>>>> clean_benchmarking
