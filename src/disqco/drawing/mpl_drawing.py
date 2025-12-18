@@ -2,12 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.path import Path as MplPath
 import matplotlib.patches as patches
-from disqco.drawing.map_positions import find_node_layout_sparse
-import networkx as nx
-from disqco.parti.FM.FM_methods_nx import calculate_cut_size
-
-
-
+from disqco.drawing.map_positions import space_mapping, get_pos_list
 
 def draw_hypergraph_mpl(
     H,
@@ -43,12 +38,8 @@ def draw_hypergraph_mpl(
     gate_node_scale = node_scale * 1.2
     small_node_scale = node_scale * 0.5
 
-    # space_map = space_mapping(qpu_sizes, depth)
-    # print(space_map)
-    # print(assignment)
-    # pos_list = get_pos_list(H, num_qubits, assignment, space_map)
-
-    pos_list = find_node_layout_sparse(H, assignment, qpu_sizes)
+    space_map = space_mapping(qpu_sizes, depth)
+    pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
@@ -82,7 +73,7 @@ def draw_hypergraph_mpl(
             else:
                 q, t = node
             x = t * xscale
-            y = (num_qubits_phys - pos_list[node]) * yscale
+            y = (num_qubits_phys - pos_list[t][q]) * yscale
             return (x, y)
         return (0, 0)
 
@@ -222,34 +213,6 @@ def draw_hypergraph_mpl(
                 bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
                 ax.add_patch(bezier)
 
-<<<<<<< HEAD
-    # buffer_left_time = -1
-    # buffer_right_time = depth
-    # for qubit in range(num_qubits):
-    #     left_x = buffer_left_time * xscale
-    #     left_y_val = pos_list[(qubit, 0)]
-    #     if left_y_val is None:
-    #         left_y_val = qubit
-    #     left_y = (num_qubits_phys - int(left_y_val)) * yscale
-    #     right_x = buffer_right_time * xscale
-    #     right_y_val = pos_list[(qubit, depth-1)]
-    #     if right_y_val is None:
-    #         right_y_val = qubit
-    #     right_y = (num_qubits_phys - int(right_y_val)) * yscale
-    #     ax.scatter(left_x, left_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
-    #     # Only draw right boundary node if the final time-edge exists
-    #     has_tail = True
-    #     if depth >= 2 and hasattr(H, 'hyperedges'):
-    #         edge_id = ((qubit, depth - 2), (qubit, depth - 1))
-    #         has_tail = edge_id in getattr(H, 'hyperedges', {})
-    #     if has_tail:
-    #         ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
-    #     ax.plot([left_x, node_pos.get((qubit, 0), (left_x, left_y))[0]], [left_y, node_pos.get((qubit, 0), (left_x, left_y))[1]], color=edge_color, lw=1, zorder=2)
-    #     if has_tail:
-    #         ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
-    #     # Always show q_i labels at the start
-    #     ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', color='k' if not invert_colors else 'w', zorder=4)
-=======
     buffer_left_time = -1
     buffer_right_time = depth
     for qubit in range(num_qubits):
@@ -276,11 +239,10 @@ def draw_hypergraph_mpl(
             ax.plot([right_x, node_pos.get((qubit, depth-1), (right_x, right_y))[0]], [right_y, node_pos.get((qubit, depth-1), (right_x, right_y))[1]], color=edge_color, lw=1, zorder=2)
         # Always show q_i labels at the start
         ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', color='k' if not invert_colors else 'w', zorder=4)
->>>>>>> clean_benchmarking
 
     # Draw partition boundaries and Q_i labels
     for i in range(1, len(qpu_sizes)):
-        boundary = sum(qpu_sizes[:i])+1
+        boundary = sum(qpu_sizes[:i])
         line_y = (num_qubits_phys - boundary + 0.5) * yscale
         ax.axhline(line_y, color=boundary_color, linestyle='--', lw=1, zorder=10)
         # Add Q_i label above the boundary line on the far right, starting from Q_0
@@ -748,171 +710,5 @@ def draw_subgraph_mpl(
         return HTML(f'<img src="data:image/png;base64,{img_data}" width="{display_width}" />')
     else:
         plt.show()
-<<<<<<< HEAD
-    return ax
-
-def draw_partitioned_graph_nx(graph, num_partitions, assignment, title="Graph Partitioning"):
-    """
-    Draw a graph with nodes positioned in boxes on the circumference of a circle, one box per QPU
-    """
-    if len(graph.nodes()) > 64:
-        print(f"Graph too large to visualize effectively ({len(graph.nodes())} nodes). Skipping visualization.")
-        return
-        
-    fig, ax = plt.subplots(1, 1, figsize=(12, 12))
-    
-    colors = plt.cm.Set3(np.linspace(0, 1, num_partitions))
-    
-    # Group nodes by partition
-    partition_nodes = {}
-    for node_idx, node in enumerate(graph.nodes()):
-        partition = assignment[node] if isinstance(assignment, (dict, np.ndarray)) and len(assignment) > max(graph.nodes()) else assignment[node_idx]
-        if partition not in partition_nodes:
-            partition_nodes[partition] = []
-        partition_nodes[partition].append(node)
-    
-    pos = {}
-    
-    # Parameters for box layout on circumference
-    circle_radius = 1.0  # Radius of the main circle
-    box_width = 0.6      # Width of each box
-    box_height = 0.6     # Height of each box
-    
-    # For each partition, create a box on the circumference with spring layout inside
-    for partition in range(num_partitions):
-        if partition not in partition_nodes or not partition_nodes[partition]:
-            continue
-            
-        nodes_in_partition = partition_nodes[partition]
-        
-        # Calculate angle for this partition's box position
-        angle = (partition / num_partitions) * 2 * np.pi
-        
-        # Position the box center on the circumference
-        box_center_x = circle_radius * np.cos(angle)
-        box_center_y = circle_radius * np.sin(angle)
-        
-        # Create subgraph for this partition (only internal edges)
-        partition_subgraph = graph.subgraph(nodes_in_partition)
-        
-        # Generate spring layout for the subgraph
-        if len(nodes_in_partition) == 1:
-            # Single node - place at box center
-            pos[nodes_in_partition[0]] = (box_center_x, box_center_y)
-        else:
-            # Multiple nodes - use spring layout within the box
-            subgraph_pos = nx.spring_layout(
-                partition_subgraph, 
-                k=1/np.sqrt(len(nodes_in_partition)), 
-                iterations=50,
-                seed=42 + partition  # Different seed for each partition
-            )
-            
-            # Transform the spring layout to fit within the box
-            if subgraph_pos:
-                # Scale factor to fit within the box
-                scale_factor_x = box_width * 0.8 / 2  # Leave some margin
-                scale_factor_y = box_height * 0.8 / 2
-                
-                # Transform each node position
-                for node in nodes_in_partition:
-                    # Get normalized position from spring layout
-                    local_x, local_y = subgraph_pos[node]
-                    
-                    # Scale and translate to box region
-                    final_x = box_center_x + local_x * scale_factor_x
-                    final_y = box_center_y + local_y * scale_factor_y
-                    
-                    pos[node] = (final_x, final_y)
-    
-    # Draw boxes on the circumference for each partition
-    for partition in range(num_partitions):
-        if partition not in partition_nodes or not partition_nodes[partition]:
-            continue
-            
-        # Calculate angle and box position
-        angle = (partition / num_partitions) * 2 * np.pi
-        box_center_x = circle_radius * np.cos(angle)
-        box_center_y = circle_radius * np.sin(angle)
-        
-        # Calculate box boundaries
-        left = box_center_x - box_width / 2
-        right = box_center_x + box_width / 2
-        bottom = box_center_y - box_height / 2
-        top = box_center_y + box_height / 2
-        
-        # Draw box boundary
-        box_x = [left, right, right, left, left]
-        box_y = [bottom, bottom, top, top, bottom]
-        ax.plot(box_x, box_y, 'k-', alpha=0.7, linewidth=2)
-        
-        # Add QPU label above the box
-        label_x = box_center_x
-        label_y = top + 0.08
-        ax.text(label_x, label_y, f'QPU {partition}', 
-                fontsize=10, fontweight='bold', 
-                ha='center', va='bottom',
-                bbox=dict(boxstyle="round,pad=0.3", facecolor=colors[partition], alpha=0.8))
-    
-    
-    # Draw edges
-    edge_colors = []
-    for u, v in graph.edges():
-        u_partition = assignment[u] if isinstance(assignment, (dict, np.ndarray)) and len(assignment) > max(graph.nodes()) else assignment[list(graph.nodes()).index(u)]
-        v_partition = assignment[v] if isinstance(assignment, (dict, np.ndarray)) and len(assignment) > max(graph.nodes()) else assignment[list(graph.nodes()).index(v)]
-        
-        if u_partition == v_partition:
-            edge_colors.append('gray')  # Internal edges
-        else:
-            edge_colors.append('red')   # Cut edges
-    
-    nx.draw_networkx_edges(graph, pos, edge_color=edge_colors, alpha=0.7, width=1.5, ax=ax)
-    
-    # Draw nodes colored by partition
-    for partition in range(num_partitions):
-        nodes_in_partition = []
-        for node_idx, node in enumerate(graph.nodes()):
-            node_partition = assignment[node] if isinstance(assignment, (dict, np.ndarray)) and len(assignment) > max(graph.nodes()) else assignment[node_idx]
-            if node_partition == partition:
-                nodes_in_partition.append(node)
-        
-        if nodes_in_partition:
-            nx.draw_networkx_nodes(graph, pos, nodelist=nodes_in_partition, 
-                                 node_color=[colors[partition]], 
-                                 node_size=400, alpha=0.9, edgecolors='black', linewidths=1, ax=ax)
-    
-    # Draw node labels
-    nx.draw_networkx_labels(graph, pos, font_size=8, font_weight='bold', ax=ax)
-    
-    # Draw edge weights if they exist
-    edge_labels = nx.get_edge_attributes(graph, 'weight')
-    if edge_labels:
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels, font_size=6, ax=ax)
-    
-    ax.set_xlim(-1.8, 1.8)  # Larger to accommodate boxes on circumference
-    ax.set_ylim(-1.8, 1.8)
-    ax.set_aspect('equal')
-    ax.set_title(title, fontsize=14, fontweight='bold')
-    ax.axis('off')
-    
-    # Add legend
-    cut_edges = sum(1 for u, v in graph.edges() 
-                   if (assignment[u] if isinstance(assignment, (dict, np.ndarray)) and len(assignment) > max(graph.nodes()) else assignment[list(graph.nodes()).index(u)]) != 
-                      (assignment[v] if isinstance(assignment, (dict, np.ndarray)) and len(assignment) > max(graph.nodes()) else assignment[list(graph.nodes()).index(v)]))
-    total_edges = len(graph.edges())
-    
-    # Calculate cut size properly
-    try:
-        cut_size = calculate_cut_size(graph, assignment)
-        ax.text(0, -1.6, f'Cut edges: {cut_edges}/{total_edges} (Cut size: {cut_size})', 
-                ha='center', fontsize=10, fontweight='bold')
-    except:
-        ax.text(0, -1.6, f'Cut edges: {cut_edges}/{total_edges}', 
-                ha='center', fontsize=10, fontweight='bold')
-    
-    plt.tight_layout()
-    plt.show()
-=======
     
     return ax
->>>>>>> clean_benchmarking

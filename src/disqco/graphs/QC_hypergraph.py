@@ -36,12 +36,8 @@ class QuantumCircuitHyperGraph:
     def init_from_circuit(self, group_gates=True, anti_diag=False, qpu_sizes=None):
         self.layers = self.extract_layers(group_gates=group_gates, anti_diag=anti_diag, qpu_sizes=qpu_sizes)
         self.depth = len(self.layers)
-        # Build graph strictly from operations/measurements first (no idle timeline nodes)
+        self.add_time_neighbor_edges(self.depth, range(self.num_qubits))
         self.map_circuit_to_hypergraph()
-        # Ensure each qubit starts with a reset-like node at time 0 if none exists
-        self.add_initial_reset_nodes()
-        # Then connect time edges only between existing consecutive nodes, skipping out of measurements
-        self.connect_time_edges_between_existing_nodes()
 
     def extract_layers(self, group_gates=True, anti_diag=False, qpu_sizes=None):
         layers = circuit_to_gate_layers(self.circuit, qpu_sizes=qpu_sizes)
@@ -282,15 +278,10 @@ class QuantumCircuitHyperGraph:
      
     def map_circuit_to_hypergraph(self,):
         layers_dict = self.layers
-<<<<<<< HEAD
-        # Build nodes/hyperedges. Measurement nodes will break time-like edges; any later
-        # operation naturally restarts the timeline without adding idle nodes across the break.
-=======
         # Track measurement and reset locations per qubit to adjust temporal edges later
         meas_times = defaultdict(set)
         # Times where the qubit participates in any non-measure operation (single- or two-qubit, groups included)
         op_times_non_measure = defaultdict(set)
->>>>>>> clean_benchmarking
         for l in layers_dict:
             layer = layers_dict[l]
             for gate in layer:
@@ -306,11 +297,8 @@ class QuantumCircuitHyperGraph:
                     cbit = gate.get('cbit', None)
                     if cbit is not None:
                         self.set_node_attribute(node, 'measurement_bit', cbit)
-<<<<<<< HEAD
-=======
                     # Mark measurement time to cut temporal edges after this time
                     meas_times[qubit].add(time)
->>>>>>> clean_benchmarking
                 elif gate['type'] == 'single-qubit':
                     qubit = gate['qargs'][0]
                     time = l
@@ -331,11 +319,8 @@ class QuantumCircuitHyperGraph:
                             self.set_node_attribute(node, 'classically_controlled', True)
                             self.set_node_attribute(node, 'control_register', reg)
                             self.set_node_attribute(node, 'control_val', val)
-<<<<<<< HEAD
-=======
                     # Any non-measure single-qubit op restarts temporal edges from this time forward
                     op_times_non_measure[qubit].add(time)
->>>>>>> clean_benchmarking
                 elif gate['type'] == 'two-qubit':
                     qubit1 = gate['qargs'][0]
                     qubit2 = gate['qargs'][1]
@@ -363,28 +348,21 @@ class QuantumCircuitHyperGraph:
                     root_set = set()
                     root_set.add(root_node)
                     receiver_set = set()
-                    max_time_added = None
-                    any_added = False
                     for sub_gate in gate['sub-gates']:
                         if sub_gate['type'] == 'single-qubit':
                             qubit = sub_gate['qargs'][0]
-                            sg_time = sub_gate['time']
-                            node = self.add_node(qubit, sg_time)
+                            time = sub_gate['time']
+                            node = self.add_node(qubit,time)
                             root_set.add(node)
                             self.set_node_attribute(node,'type',sub_gate['type'])
                             self.set_node_attribute(node,'name',sub_gate['name'])
                             self.set_node_attribute(node,'params',sub_gate['params'])
-<<<<<<< HEAD
-                            any_added = True
-                            max_time_added = sg_time if max_time_added is None else max(max_time_added, sg_time)
-=======
                             op_times_non_measure[qubit].add(time)
->>>>>>> clean_benchmarking
                         elif sub_gate['type'] == 'two-qubit':
                             qubit1 = sub_gate['qargs'][0]
                             qubit2 = sub_gate['qargs'][1]
-                            sg_time = sub_gate['time']
-                            node1 = self.add_node(qubit1, sg_time)
+                            time = sub_gate['time']
+                            node1 = self.add_node(qubit1,time)
                             root_set.add(node1)
                             if node1 == root_node:
                                 type_ = 'group'
@@ -392,72 +370,13 @@ class QuantumCircuitHyperGraph:
                                 type_ = 'root_t'
                             self.set_node_attribute(node1,'type',type_)
                             self.set_node_attribute(node1,'name','control')
-                            node2 = self.add_node(qubit2, sg_time)
+                            node2 = self.add_node(qubit2,time)
                             receiver_set.add(node2)
                             self.set_node_attribute(node2,'type',gate['type'])
                             if sub_gate['name'] == 'cx' or sub_gate['name'] == 'cu': # May need to specify more
                                 self.set_node_attribute(node2,'name','target')
                             else:
                                 self.set_node_attribute(node2,'name','control')
-<<<<<<< HEAD
-                            any_added = True
-                            max_time_added = sg_time if max_time_added is None else max(max_time_added, sg_time)
-                    # Ensure the root has a continuous presence across the group's span by
-                    # explicitly creating root_t nodes (without relying on pre-added idle nodes).
-                    if any_added:
-                        # Span root only up to the last sub-gate time we actually added
-                        root_end_time = max_time_added
-                        for t in range(start_time, root_end_time + 1):
-                            root_set.add((root, t))
-                            if t != start_time:
-                                if (root, t) not in self.nodes:
-                                    self.add_node(root, t)
-                                    self.set_node_attribute((root, t), 'type', 'root_t')
-                                else:
-                                    # Don't override measurement nodes
-                                    if self.node_attrs.get((root, t), {}).get('type') != 'measure':
-                                        self.set_node_attribute((root, t), 'type', 'root_t')
-                        self.add_hyperedge(root_node,root_set,receiver_set)
-
-    def connect_time_edges_between_existing_nodes(self):
-        """
-        For each qubit, sort existing times (including reset at t=0, ops, measures, group roots).
-        Between each consecutive pair (t_from, t_to):
-        - If t_from is a measure, skip (breaks the chain).
-        - Otherwise, create idle nodes for missing steps in (t_from, t_to) and connect stepwise.
-        This preserves that lines end after the final existing node and only resume after later ops.
-        """
-        for q in range(self.num_qubits):
-            times = sorted(t for (qq, t) in self.nodes if qq == q)
-            for i in range(len(times) - 1):
-                t_from = times[i]
-                t_to = times[i + 1]
-                node_from = (q, t_from)
-                # Skip if the source is a measurement (break)
-                if self.node_attrs.get(node_from, {}).get('type') == 'measure':
-                    continue
-                prev_t = t_from
-                for t in range(t_from + 1, t_to + 1):
-                    curr = (q, t)
-                    if curr not in self.nodes:
-                        self.add_node(q, t)  # idle node
-                    self.add_edge(((q, prev_t), curr), (q, prev_t), curr)
-                    prev_t = t
-
-    def add_initial_reset_nodes(self):
-        """
-        Add a starting node at time 0 for each qubit if none exists yet.
-        This node is marked as a 'reset' to represent an initialized line start.
-        """
-        for q in range(self.num_qubits):
-            # If there is already a node at time 0 for this qubit, do nothing
-            if (q, 0) in self.nodes:
-                continue
-            # Otherwise add a reset node at t=0
-            node = self.add_node(q, 0)
-            self.set_node_attribute(node, 'type', 'reset')
-            self.set_node_attribute(node, 'name', 'reset')
-=======
                             op_times_non_measure[qubit1].add(time)
                             op_times_non_measure[qubit2].add(time)
                     for t in range(start_time,time+1):
@@ -484,7 +403,6 @@ class QuantumCircuitHyperGraph:
                     edge_id = (node_a, node_b)
                     if edge_id in self.hyperedges:
                         self.remove_hyperedge(edge_id)
->>>>>>> clean_benchmarking
     
     def is_subgraph(self):
         for node in self.nodes:
