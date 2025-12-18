@@ -441,6 +441,7 @@ def update_config(old_config,
 
 def find_member_random(set):
     member = random.choice(list(set))
+    # member = list(set)[-1]
     # for member in set: # Choose first element 
     #     break
     return member

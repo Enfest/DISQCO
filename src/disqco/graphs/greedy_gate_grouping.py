@@ -109,7 +109,7 @@ def group_distributable_packets_sym(layers,group_anti_diags=True):
                     group1 = None
                     num_sub_gates1 = 0
                 
-                if gate_name == 'cp' or gate_name == 'cz':
+                if gate_name == 'cp' or gate_name == 'cz' or gate_name == 'cu1':
                     qubit2 = qubits[1]
                     symmetric = True
                     if qubit2 in live_controls:

@@ -99,7 +99,7 @@ def multilevel_network_partitioning(
     ML_internal_level_limit=6,
     passes_per_level=10
 ):
-    from disqco.parti.FM.FM_methods import set_initial_partition_assignment
+    from disqco import set_initial_partition_assignment
     from disqco.graphs.QC_hypergraph import SubGraphManager
     
     coarsest_networks = network_level_list[0]

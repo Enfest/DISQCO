@@ -2,8 +2,10 @@ from collections import defaultdict
 from disqco.utils.qiskit_to_op_list import circuit_to_gate_layers, layer_list_to_dict
 from disqco.graphs.greedy_gate_grouping import group_distributable_packets_sym, group_distributable_packets_asym
 from qiskit import QuantumCircuit
-# from disqco.graphs.quantum_network import QuantumNetwork
+from qiskit.transpiler.passes import RemoveBarriers
+from disqco.graphs.quantum_network import QuantumNetwork
 import numpy as np
+from typing import Optional
 
 class QuantumCircuitHyperGraph:
     """
@@ -22,13 +24,14 @@ class QuantumCircuitHyperGraph:
         self.adjacency = defaultdict(set)
         self.node_attrs = {}
         self.hyperedge_attrs = {}
-        self.circuit = circuit
+        self.circuit = RemoveBarriers()(circuit)
         self.num_qubits = circuit.num_qubits
         self.num_qubits_init = self.num_qubits
         self.depth = circuit.depth()
         self.basis_gates = list(circuit.count_ops().keys())
         if map_circuit:
             self.init_from_circuit(group_gates, anti_diag, qpu_sizes=qpu_sizes)
+
 
     def init_from_circuit(self, group_gates=True, anti_diag=False, qpu_sizes=None):
         self.layers = self.extract_layers(group_gates=group_gates, anti_diag=anti_diag, qpu_sizes=qpu_sizes)
@@ -274,12 +277,20 @@ class QuantumCircuitHyperGraph:
         for edge_id, attr_dict in self.hyperedge_attrs.items():
             new_graph.hyperedge_attrs[edge_id] = dict(attr_dict)
 
+
         return new_graph
      
     def map_circuit_to_hypergraph(self,):
         layers_dict = self.layers
+<<<<<<< HEAD
         # Build nodes/hyperedges. Measurement nodes will break time-like edges; any later
         # operation naturally restarts the timeline without adding idle nodes across the break.
+=======
+        # Track measurement and reset locations per qubit to adjust temporal edges later
+        meas_times = defaultdict(set)
+        # Times where the qubit participates in any non-measure operation (single- or two-qubit, groups included)
+        op_times_non_measure = defaultdict(set)
+>>>>>>> clean_benchmarking
         for l in layers_dict:
             layer = layers_dict[l]
             for gate in layer:
@@ -295,6 +306,11 @@ class QuantumCircuitHyperGraph:
                     cbit = gate.get('cbit', None)
                     if cbit is not None:
                         self.set_node_attribute(node, 'measurement_bit', cbit)
+<<<<<<< HEAD
+=======
+                    # Mark measurement time to cut temporal edges after this time
+                    meas_times[qubit].add(time)
+>>>>>>> clean_benchmarking
                 elif gate['type'] == 'single-qubit':
                     qubit = gate['qargs'][0]
                     time = l
@@ -315,6 +331,11 @@ class QuantumCircuitHyperGraph:
                             self.set_node_attribute(node, 'classically_controlled', True)
                             self.set_node_attribute(node, 'control_register', reg)
                             self.set_node_attribute(node, 'control_val', val)
+<<<<<<< HEAD
+=======
+                    # Any non-measure single-qubit op restarts temporal edges from this time forward
+                    op_times_non_measure[qubit].add(time)
+>>>>>>> clean_benchmarking
                 elif gate['type'] == 'two-qubit':
                     qubit1 = gate['qargs'][0]
                     qubit2 = gate['qargs'][1]
@@ -332,6 +353,9 @@ class QuantumCircuitHyperGraph:
                     self.set_hyperedge_attribute((node1,node2),'type',gate['type'])
                     self.set_hyperedge_attribute((node1,node2),'name',gate['name'])
                     self.set_hyperedge_attribute((node1,node2),'params',gate['params'])
+                    # Two-qubit op counts as an operation time for both qubits
+                    op_times_non_measure[qubit1].add(time)
+                    op_times_non_measure[qubit2].add(time)
                 elif gate['type'] == 'group':
                     root = gate['root']
                     start_time = l
@@ -350,8 +374,12 @@ class QuantumCircuitHyperGraph:
                             self.set_node_attribute(node,'type',sub_gate['type'])
                             self.set_node_attribute(node,'name',sub_gate['name'])
                             self.set_node_attribute(node,'params',sub_gate['params'])
+<<<<<<< HEAD
                             any_added = True
                             max_time_added = sg_time if max_time_added is None else max(max_time_added, sg_time)
+=======
+                            op_times_non_measure[qubit].add(time)
+>>>>>>> clean_benchmarking
                         elif sub_gate['type'] == 'two-qubit':
                             qubit1 = sub_gate['qargs'][0]
                             qubit2 = sub_gate['qargs'][1]
@@ -371,6 +399,7 @@ class QuantumCircuitHyperGraph:
                                 self.set_node_attribute(node2,'name','target')
                             else:
                                 self.set_node_attribute(node2,'name','control')
+<<<<<<< HEAD
                             any_added = True
                             max_time_added = sg_time if max_time_added is None else max(max_time_added, sg_time)
                     # Ensure the root has a continuous presence across the group's span by
@@ -428,6 +457,34 @@ class QuantumCircuitHyperGraph:
             node = self.add_node(q, 0)
             self.set_node_attribute(node, 'type', 'reset')
             self.set_node_attribute(node, 'name', 'reset')
+=======
+                            op_times_non_measure[qubit1].add(time)
+                            op_times_non_measure[qubit2].add(time)
+                    for t in range(start_time,time+1):
+                        root_set.add((root,t))
+                        if t != start_time:
+                            self.set_node_attribute((root,t),'type', 'root_t')
+                    self.add_hyperedge(root_node,root_set,receiver_set)
+
+        # After building nodes/edges, adjust temporal neighbor edges per measurement/reset rules
+        # Remove edges (q,t)->(q,t+1) when a measurement has occurred and until ANY subsequent operation occurs on that qubit.
+        for q in range(self.num_qubits):
+            q_meas = meas_times.get(q, set())
+            q_ops  = op_times_non_measure.get(q, set())
+            connected = True  # default before any measurement
+            for t in range(0, self.depth - 1):
+                # Evaluate events at current time t; measurement at t breaks, non-measure op at t restarts
+                if t in q_meas:
+                    connected = False
+                elif t in q_ops:
+                    connected = True
+                if not connected:
+                    node_a = (q, t)
+                    node_b = (q, t+1)
+                    edge_id = (node_a, node_b)
+                    if edge_id in self.hyperedges:
+                        self.remove_hyperedge(edge_id)
+>>>>>>> clean_benchmarking
     
     def is_subgraph(self):
         for node in self.nodes:
@@ -436,7 +493,7 @@ class QuantumCircuitHyperGraph:
         return False
 
 
-    def draw(self, network: None = None, assignment: np.ndarray | None = None, qpu_info: list[int] | dict[str, int] | None = None, *, show_labels=True, output='tikz', **kwargs):
+    def draw(self, network: Optional[QuantumNetwork] = None, assignment: np.ndarray | None = None, qpu_info: list[int] | dict[str, int] | None = None, *, show_labels=True, output='tikz', **kwargs):
         """
         Render the hypergraph as a TikZ figure (default) or with matplotlib.
 

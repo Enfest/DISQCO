@@ -6,6 +6,7 @@ from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
 from disqco.parti.FM.FM_methods import *
 import networkx as nx
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
+import random
 
 class FiducciaMattheyses(QuantumCircuitPartitioner):
     """
@@ -68,7 +69,8 @@ class FiducciaMattheyses(QuantumCircuitPartitioner):
             self.initial_assignment = set_initial_partition_assignment(graph=self.hypergraph, network=network)
 
     def FM_pass(self, hypergraph, assignment, **kwargs):
-
+        
+        random.seed()
         active_hypergraph_nodes = kwargs.get('active_hypergraph_nodes', hypergraph.nodes)
         limit = kwargs.get('limit', len(hypergraph.nodes) * 0.125)
         # print("Limit:", limit)
