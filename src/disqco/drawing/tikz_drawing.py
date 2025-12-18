@@ -1,14 +1,16 @@
 from __future__ import annotations
 from disqco.drawing.map_positions import space_mapping, get_pos_list, get_pos_list_ext, find_node_layout_sparse
 from typing import Dict, Iterable, Union
-from disqco.graphs.quantum_network import QuantumNetwork
+from disqco import QuantumNetwork
 try:
     from IPython.core.getipython import get_ipython
 except ImportError:
     get_ipython = lambda: None
 import numpy as np
+import shutil
 from disqco.graphs.QC_hypergraph_extended import HyperGraph
-from disqco.parti.FM.FM_methods import set_initial_partition_assignment
+from disqco import set_initial_partition_assignment
+from disqco.drawing.mpl_drawing import draw_hypergraph_mpl
 # 
 
 def hypergraph_to_tikz(
@@ -491,7 +493,7 @@ def hypergraph_to_tikz(
     return final_code
 
 def draw_graph_tikz(hypergraph, network = None, assignment = None, invert_colors=False, fill_background=True, assignment_map=None, show_labels=True,
-        tikz_raw = False, remove_intermediate_roots=False, dpi=300):
+        tikz_raw = False, remove_intermediate_roots=False, dpi=300, display_width=None):
     """
     Jupyter convenience function to compile & display the TikZ code inline.
     """
@@ -520,9 +522,29 @@ def draw_graph_tikz(hypergraph, network = None, assignment = None, invert_colors
     )
     if tikz_raw:
         return tikz_code
+    
+    # Check if pdflatex is available
+    if shutil.which('pdflatex') is None:
+        print("⚠️  Warning: pdflatex not found on system PATH.")
+        print("    Falling back to matplotlib-based drawing.")
+        print("    Tip: Set tikz_raw=True to get raw TikZ code instead.")
+        return draw_hypergraph_mpl(
+            H=hypergraph,
+            assignment=assignment,
+            qpu_info=qpu_sizes,
+            invert_colors=invert_colors,
+            fill_background=fill_background,
+            assignment_map=assignment_map,
+            show_labels=show_labels,
+            remove_intermediate_roots=remove_intermediate_roots,
+            dpi=dpi,
+            display_width=display_width
+        )
+    
     ip = get_ipython()
     args = f"-f -r --dpi={dpi}"
-    return ip.run_cell_magic('tikz', args, tikz_code)
+    ip.run_cell_magic('tikz', args, tikz_code)
+    return 
 
 def hypergraph_to_tikz_v2(
     H : HyperGraph,
@@ -975,12 +997,15 @@ def draw_graph_tikz_v2(
     depth: int,
     num_qubits: int,
     show_labels: bool = True,
+    dpi: int = 400,
+    display_width=None,
     **kwargs,
 ):
     """Compile & render the TikZ code inline in a Jupyter notebook."""
     code = hypergraph_to_tikz_v2(H, qubit_assignment, gate_assignment, qpu_info, depth=depth, num_qubits=num_qubits, show_labels=show_labels, **kwargs)
     ip = get_ipython()
-    return ip.run_cell_magic("tikz", "-f -r --dpi=400", code)
+    args = f"-f -r --dpi={dpi}"
+    return ip.run_cell_magic("tikz", args, code)
 
 
 def hypergraph_to_tikz_subgraph(
@@ -1624,7 +1649,8 @@ def draw_subgraph_tikz(
     show_labels=True,
     tikz_raw=False, 
     remove_intermediate_roots=False,
-    dpi=300
+    dpi=300,
+    display_width=None
 ):
     """
     Jupyter convenience function to compile & display the subgraph TikZ code inline.
@@ -1656,6 +1682,26 @@ def draw_subgraph_tikz(
     
     if tikz_raw:
         return tikz_code
+    
+    # Check if pdflatex is available
+    if shutil.which('pdflatex') is None:
+        print("⚠️  Warning: pdflatex not found on system PATH.")
+        print("    Falling back to matplotlib-based drawing.")
+        print("    Tip: Set tikz_raw=True to get raw TikZ code instead.")
+        from disqco.drawing.mpl_drawing import draw_subgraph_mpl
+        return draw_subgraph_mpl(
+            H=H,
+            assignment=assignment,
+            qpu_info=qpu_info,
+            network=network,
+            node_map=node_map,
+            invert_colors=invert_colors,
+            fill_background=fill_background,
+            show_labels=show_labels,
+            remove_intermediate_roots=remove_intermediate_roots,
+            dpi=dpi,
+            display_width=display_width
+        )
         
     ip = get_ipython()
     if ip is not None:

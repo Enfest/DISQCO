@@ -20,10 +20,11 @@ from multiprocessing import Pool
 
 from qiskit import transpile
 
-from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
-from disqco.graphs.quantum_network import QuantumNetwork, linear_coupling, grid_coupling, random_coupling
-from disqco.parti.FM.FM_methods import set_initial_partition_assignment
-from disqco.parti.FM.fiduccia import FiducciaMattheyses
+from disqco import QuantumCircuitHyperGraph
+from disqco import QuantumNetwork
+from disqco.graphs.quantum_network import linear_coupling, grid_coupling, random_coupling
+from disqco import set_initial_partition_assignment
+from disqco.parti import FiducciaMattheyses
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 
 

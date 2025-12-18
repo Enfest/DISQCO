@@ -25,10 +25,10 @@ from qiskit.circuit.library import QFT, QuantumVolume
 
 from disqco.circuits.cp_fraction import cp_fraction
 from disqco.circuits.QAOA import QAOA_random
-from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
-from disqco.graphs.quantum_network import QuantumNetwork
-from disqco.parti.FM.fiduccia import FiducciaMattheyses
-from disqco.parti.FM.FM_methods import set_initial_partition_assignment
+from disqco import QuantumCircuitHyperGraph
+from disqco import QuantumNetwork
+from disqco.parti import FiducciaMattheyses
+from disqco import set_initial_partition_assignment
 from disqco.graphs.coarsening.coarsener import HypergraphCoarsener
 
 

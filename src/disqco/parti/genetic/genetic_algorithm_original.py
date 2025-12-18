@@ -17,7 +17,7 @@ SelectFunc = Callable[[Population,FitnessFunc],Population]
 CrossoverFunc = Callable[[Genome,Genome], Tuple[Genome,Genome]]
 MutationFunc = Callable[[Genome,int,int],Genome]
 
-class Genetic_Partitioning():
+class GeneticPartitioningOriginal():
 
     def __init__(self,circuit,qpu_info, choose_layers = False, layers = None, max_depth=10000, multi_process = True, gate_packing = False,transpile_circuit=False) -> None:
         if transpile_circuit == True:
@@ -49,7 +49,7 @@ class Genetic_Partitioning():
         self.multi_process = multi_process
         self.gate_packing = gate_packing
 
-    def run(self, pop_size,num_generations, initial_partition=None, random_start = False, mutation_rate = 0.5,search_method = False,search_number=100,log = True,log_frequency = 50,multi_process=True, choose_initial = False) -> Tuple[Population, int]:  
+    def run(self, pop_size,num_generations, initial_partition=None, random_start = False, mutation_rate = 0.5,search_method = False,search_number=100,log = True,log_frequency = 50,multi_process=True, choose_initial = False) -> dict:  
         max_over_time = []
         pool = mp.Pool(mp.cpu_count())
         if not choose_initial:

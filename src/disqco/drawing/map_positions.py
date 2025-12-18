@@ -27,43 +27,56 @@ def get_pos_list(graph, num_qubits, assignment, space_map, assignment_map = None
         inverse_assignment_map = {}
         for node in assignment_map:
             inverse_assignment_map[assignment_map[node]] = node
-    for q in range(len(assignment[0])):
-        old_partition = None
-        for t in range(len(assignment)):
+    
+    # Process each time step with two passes to preserve continuity
+    for t in range(len(assignment)):
+        # First pass: handle qubits staying in same partition (preserve continuity)
+        for q in range(len(assignment[0])):
             node = (q, t)
             if assignment_map is not None:
-                if (q,t) not in inverse_assignment_map:
+                if (q, t) not in inverse_assignment_map:
                     continue
-                node = inverse_assignment_map[(q,t)]
-
-            # partition = assignment[(q,t)]
+                node = inverse_assignment_map[(q, t)]
+            
             try:
                 partition = assignment[node[1]][node[0]]
             except IndexError:
                 print(f"IndexError for q={q}, t={t} which maps to {node}. Assignment {assignment}")
-            if partition == -1:
-                # If the qubit is not assigned to any partition, we can skip it
                 continue
-            if old_partition is not None:
-                if partition == old_partition:
+            
+            if partition == -1:
+                continue
+            
+            # Only handle qubits staying in same partition in first pass
+            if t > 0 and pos_list[t-1][q] is not None:
+                prev_partition = assignment[t-1][q] if assignment_map is None else assignment[t-1][node[0]]
+                if partition == prev_partition:
+                    y_pos = pos_list[t-1][q]
                     if y_pos in space_map[t][partition]:
-                        y_pos = pos_list[t-1][q]
-                        pos_list[t][q] = y_pos 
-                        space_map[t][partition].remove(y_pos)
-                    else:
-                        qubit_list = space_map[t][partition]
-                        y_pos = qubit_list.pop(0)
                         pos_list[t][q] = y_pos
-
-                else:
-                    qubit_list = space_map[t][partition]
-                    y_pos = qubit_list.pop(0)
-                    pos_list[t][q] = y_pos
-            else:
-                qubit_list = space_map[t][partition]
-                y_pos = qubit_list.pop(0)
+                        space_map[t][partition].remove(y_pos)
+        
+        # Second pass: handle qubits entering new partition or at t=0
+        for q in range(len(assignment[0])):
+            node = (q, t)
+            if assignment_map is not None:
+                if (q, t) not in inverse_assignment_map:
+                    continue
+                node = inverse_assignment_map[(q, t)]
+            
+            try:
+                partition = assignment[node[1]][node[0]]
+            except IndexError:
+                continue
+            
+            if partition == -1 or pos_list[t][q] is not None:
+                continue
+            
+            # Assign new position from available slots
+            if space_map[t][partition]:
+                y_pos = space_map[t][partition].pop(0)
                 pos_list[t][q] = y_pos
-            old_partition = partition
+    
     return pos_list
 
 def get_pos_list_ext(graph, num_qubits, assignment, space_map, qpu_sizes, assignment_map = None):
@@ -76,53 +89,40 @@ def get_pos_list_ext(graph, num_qubits, assignment, space_map, qpu_sizes, assign
         for node in assignment_map:
             inverse_assignment_map[assignment_map[node]] = node
     
-    for q in range(num_qubits):
-        old_partition = None
-        for t in range(num_layers):
+    # Process each time step with two passes to preserve continuity
+    for t in range(num_layers):
+        # First pass: handle qubits staying in same partition (preserve continuity)
+        for q in range(num_qubits):
             if assignment_map is not None:
-                q, t = inverse_assignment_map[(q, t)]
-            # partition = assignment[(q,t)]
+                if (q, t) not in inverse_assignment_map:
+                    continue
+            
             partition = assignment[t][q]
-            if old_partition is not None:
-                if partition == old_partition:
+            
+            # Only handle qubits staying in same partition in first pass
+            if t > 0 and pos_list[t-1][q] is not None:
+                prev_partition = assignment[t-1][q]
+                if partition == prev_partition:
+                    y_pos = pos_list[t-1][q]
                     if y_pos in space_map[t][partition]:
-                        y_pos = pos_list[t-1][q]
-                        pos_list[t][q] = y_pos 
-                        space_map[t][partition].remove(y_pos)
-                    else:
-                        qubit_list = space_map[t][partition]
-                        y_pos = qubit_list.pop(0)
                         pos_list[t][q] = y_pos
-
-                else:
-                    qubit_list = space_map[t][partition]
-                    y_pos = qubit_list.pop(0)
-                    pos_list[t][q] = y_pos
-            else:
-                qubit_list = space_map[t][partition]
-                y_pos = qubit_list.pop(0)
+                        space_map[t][partition].remove(y_pos)
+        
+        # Second pass: handle qubits entering new partition or at t=0
+        for q in range(num_qubits):
+            if assignment_map is not None:
+                if (q, t) not in inverse_assignment_map:
+                    continue
+            
+            partition = assignment[t][q]
+            
+            if pos_list[t][q] is not None:
+                continue
+            
+            # Assign new position from available slots
+            if space_map[t][partition]:
+                y_pos = space_map[t][partition].pop(0)
                 pos_list[t][q] = y_pos
-            old_partition = partition
-
-
-    # pos_dict = {}
-    # for t in range(len(pos_list)):
-    #     for q in range(num_qubits):
-    #         pos_dict[(q, t)] = pos_list[t][q]
-
-    # for node in graph.nodes():
-    #     if node not in pos_dict:
-    #         partition = assignment[node]
-    #         if partition == 0:
-    #             boundary1 = 0
-    #             boundary2 = qpu_sizes[0]
-    #         else:
-    #             boundary1 = qpu_sizes[partition-1]
-    #             boundary2 = qpu_sizes[partition]
-    #         position = (boundary1 + boundary2) // 2
-
-    #         pos_dict[node] = position
-
 
     return pos_list
 
@@ -509,55 +509,64 @@ def find_node_layout_sparse(graph, assignment, qpu_sizes, node_map=None):
             qubit_list = [j for j in range(qpu_size)]
             all_free_spaces[(t,qpu)] = qubit_list.copy()
 
-
-    # If active_nodes is provided, only process those nodes
-    nodes_to_process = graph.nodes
-    
-    # Group nodes by qubit index to maintain y-consistency
-    qubit_nodes = {}
-    for node in nodes_to_process:
+    # Get all qubits and max time from graph nodes
+    all_qubits = set()
+    max_time = 0
+    for node in graph.nodes:
         if isinstance(node, tuple) and len(node) == 2:
             q, t = node
-            if q not in qubit_nodes:
-                qubit_nodes[q] = []
-            qubit_nodes[q].append((q, t))
+            all_qubits.add(q)
+            max_time = max(max_time, t)
     
-    # Process each qubit's timeline
-    for q in sorted(qubit_nodes.keys()):
-        y = None
-        # Sort by time to maintain temporal order
-        nodes_for_qubit = sorted(qubit_nodes[q], key=lambda x: x[1])
-        for node in nodes_for_qubit:
-            q, t = node
-            partition = assignment[t][q]
-            # Skip nodes with sparse assignment value of -1
-            if partition == -1:
+    # Create tracking dict for qubit y-positions at each time step
+    qubit_y_positions = {}
+    
+    # Process each time step with two passes to preserve continuity
+    for t in range(depth):
+        # First pass: handle qubits staying in same partition (preserve continuity)
+        for q in sorted(all_qubits):
+            node = (q, t)
+            if node not in graph.nodes:
                 continue
-                
-            # Check if partition is valid
-            if partition not in qpu_sizes:
-                continue
-                # raise ValueError(f"Partition {partition} for node {node} exceeds QPU sizes {qpu_sizes}")
-
-            if y is None:
-                # First assignment for this qubit
-                if all_free_spaces[(t,partition)]:
-                    y = all_free_spaces[(t,partition)].pop(0)
-                else:
-                    y = 0  # Fallback if no space available
-            else:
-                # Try to maintain same y-position if possible
-                if y in all_free_spaces[(t,partition)]:
-                    all_free_spaces[(t,partition)].remove(y)
-                else:
-                    # Get next available position
-                    if all_free_spaces[(t,partition)]:
-                        y = all_free_spaces[(t,partition)].pop(0)
-                    else:
-                        y = 0  # Fallback
             
-            slot = slot_positions.get((partition, y), y_index + 1)
-            node_positions[node] = slot
+            partition = assignment[t][q]
+            if partition == -1 or partition not in qpu_sizes:
+                continue
+            
+            # Only handle qubits staying in same partition in first pass
+            if t > 0 and (q, t-1) in qubit_y_positions:
+                prev_node = (q, t-1)
+                if prev_node in graph.nodes:
+                    prev_partition = assignment[t-1][q]
+                    if partition == prev_partition and prev_partition != -1:
+                        prev_y = qubit_y_positions[prev_node]
+                        # Try to maintain same y-position if available
+                        if prev_y in all_free_spaces[(t, partition)]:
+                            all_free_spaces[(t, partition)].remove(prev_y)
+                            qubit_y_positions[node] = prev_y
+                            slot = slot_positions.get((partition, prev_y), y_index + 1)
+                            node_positions[node] = slot
+        
+        # Second pass: handle qubits entering new partition or at t=0
+        for q in sorted(all_qubits):
+            node = (q, t)
+            if node not in graph.nodes:
+                continue
+            
+            partition = assignment[t][q]
+            if partition == -1 or partition not in qpu_sizes:
+                continue
+            
+            # Skip if already assigned in first pass
+            if node in node_positions:
+                continue
+            
+            # Assign new position from available slots
+            if all_free_spaces[(t, partition)]:
+                y = all_free_spaces[(t, partition)].pop(0)
+                qubit_y_positions[node] = y
+                slot = slot_positions.get((partition, y), y_index + 1)
+                node_positions[node] = slot
             
     return node_positions
 

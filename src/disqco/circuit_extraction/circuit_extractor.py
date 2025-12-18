@@ -3,8 +3,8 @@ import numpy as np
 import networkx as nx
 from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit, transpile
 from qiskit.circuit import Qubit, Instruction
-from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
-from disqco.graphs.quantum_network import QuantumNetwork
+from disqco import QuantumCircuitHyperGraph
+from disqco import QuantumNetwork
 from disqco.circuit_extraction.DQC_qubit_manager import DataQubitManager, CommunicationQubitManager, ClassicalBitManager
 import math as mt
 
@@ -1022,8 +1022,8 @@ def reorder_registers_by_index(circuit):
     ordered_cregs = list(circuit.cregs)
 
     new_circ = QuantumCircuit(*ordered_qregs, *ordered_cregs)
-    for instr, qargs, cargs in circuit.data:
-        new_circ.append(instr, qargs, cargs)
+    for instruction in circuit.data:
+        new_circ.append(instruction.operation, instruction.qubits, instruction.clbits)
     return new_circ
 
 

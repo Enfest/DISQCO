@@ -3,8 +3,9 @@ from disqco.utils.qiskit_to_op_list import circuit_to_gate_layers, layer_list_to
 from disqco.graphs.greedy_gate_grouping import group_distributable_packets_sym, group_distributable_packets_asym
 from qiskit import QuantumCircuit
 from qiskit.transpiler.passes import RemoveBarriers
-# from disqco.graphs.quantum_network import QuantumNetwork
+from disqco.graphs.quantum_network import QuantumNetwork
 import numpy as np
+from typing import Optional
 
 class QuantumCircuitHyperGraph:
     """
@@ -410,7 +411,7 @@ class QuantumCircuitHyperGraph:
         return False
 
 
-    def draw(self, network: None = None, assignment: np.ndarray | None = None, qpu_info: list[int] | dict[str, int] | None = None, *, show_labels=True, output='tikz', **kwargs):
+    def draw(self, network: Optional[QuantumNetwork] = None, assignment: np.ndarray | None = None, qpu_info: list[int] | dict[str, int] | None = None, *, show_labels=True, output='tikz', **kwargs):
         """
         Render the hypergraph as a TikZ figure (default) or with matplotlib.
 

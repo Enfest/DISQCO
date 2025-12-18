@@ -19,6 +19,7 @@ def draw_hypergraph_mpl(
     figsize=(10, 6),
     save_path=None,
     dpi=150,
+    display_width=None,
 ):
     if isinstance(qpu_info, dict):
         qpu_sizes = list(qpu_info.values())
@@ -145,40 +146,44 @@ def draw_hypergraph_mpl(
             n1, n2 = all_nodes
             x1, y1 = node_pos.get(n1, (0, 0))
             x2, y2 = node_pos.get(n2, (0, 0))
-            # Only bend if q indices are different
-            if (
+            
+            # Check if this is a state edge (same qubit, different time)
+            is_state_edge = (
                 isinstance(n1, tuple) and isinstance(n2, tuple)
                 and len(n1) == 2 and len(n2) == 2
-                and n1[0] != n2[0]
+                and n1[0] == n2[0]  # Same qubit index
+            )
+            
+            if is_state_edge:
+                # State edges should be perfectly straight
+                ax.plot([x1, x2], [y1, y2], color=edge_color, lw=1, zorder=2)
+            elif (
+                isinstance(n1, tuple) and isinstance(n2, tuple)
+                and len(n1) == 2 and len(n2) == 2
+                and n1[0] != n2[0]  # Different qubit indices (gate edge)
             ):
-                dx, dy = x2 - x1, y2 - y1
-                norm = np.hypot(dx, dy)
-                if norm == 0:
-                    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-                else:
-                    px, py = -dy / norm, dx / norm
-                    bend = 0.3 * yscale
-                    mx, my = (x1 + x2) / 2 + px * bend, (y1 + y2) / 2 + py * bend
-                path = np.array([[x1, y1], [mx, my], [x2, y2]])
-                verts = [tuple(path[0]), tuple(path[1]), tuple(path[2])]
+                # Gate edges: curve in +x direction with y-offset for visibility
+                dx = abs(x2 - x1)
+                dy = abs(y2 - y1)
+                x_offset = 0.3 * max(dx, dy * 0.5)
+                y_offset = 0.1 * dy
+                mx = (x1 + x2) / 2 + x_offset
+                my = (y1 + y2) / 2 + (y_offset if y2 > y1 else -y_offset)
+                verts = [(x1, y1), (mx, my), (x2, y2)]
                 codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
-                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
                 ax.add_patch(bezier)
-            else:
-                # Draw straight line for same q index
-                ax.plot([x1, x2], [y1, y2], color=edge_color, lw=1.5, zorder=2)
         elif roots and receivers:
-            # Central node logic
-            root_times = [n[1] for n in roots if isinstance(n, tuple) and len(n) == 2]
-            rec_times = [n[1] for n in receivers if isinstance(n, tuple) and len(n) == 2]
-            if root_times and rec_times:
-                min_time = min(root_times + rec_times)
-                max_time = max(root_times + rec_times)
-                central_x = (min_time + max_time) / 2 * xscale
+            # Hyperedge: place central node at +0.5 offset from earliest root node
+            # Find the root with minimum time (earliest in the circuit)
+            earliest_root = min(roots, key=lambda n: node_pos.get(n, (float('inf'), 0))[0])
+            if earliest_root in node_pos:
+                first_root_x = node_pos[earliest_root][0]
+                central_x = first_root_x + 0.5 * xscale
             else:
                 central_x = 0
             rec_ys = [node_pos[n][1] for n in receivers if n in node_pos]
-            root_y = node_pos[roots[0]][1] if roots and roots[0] in node_pos else 0
+            root_y = node_pos[earliest_root][1] if earliest_root in node_pos else 0
             if rec_ys:
                 avg_rec_y = sum(rec_ys) / len(rec_ys)
                 if avg_rec_y > root_y:
@@ -187,23 +192,25 @@ def draw_hypergraph_mpl(
                     central_y = root_y - 0.5 * yscale
             else:
                 central_y = root_y
-            # Roots to central node (bend up)
+            # Draw curves from roots to central node and central node to receivers
             for root in roots:
                 x0, y0 = node_pos.get(root, (0, 0))
-                mx, my = (x0 + central_x) / 2, (y0 + central_y) / 2 + 0.5 * yscale
-                path = np.array([[x0, y0], [mx, my], [central_x, central_y]])
-                verts = [tuple(path[0]), tuple(path[1]), tuple(path[2])]
+                x_offset = 0.3 * abs(central_x - x0)
+                mx = (x0 + central_x) / 2 + x_offset
+                my = (y0 + central_y) / 2
+                verts = [(x0, y0), (mx, my), (central_x, central_y)]
                 codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
-                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
                 ax.add_patch(bezier)
-            # Central node to receivers (bend down)
+            
             for rec in receivers:
                 x1, y1 = node_pos.get(rec, (0, 0))
-                mx, my = (central_x + x1) / 2, (central_y + y1) / 2 - 0.5 * yscale
-                path = np.array([[central_x, central_y], [mx, my], [x1, y1]])
-                verts = [tuple(path[0]), tuple(path[1]), tuple(path[2])]
+                x_offset = 0.3 * abs(x1 - central_x)
+                mx = (central_x + x1) / 2 + x_offset
+                my = (central_y + y1) / 2
+                verts = [(central_x, central_y), (mx, my), (x1, y1)]
                 codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
-                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1.5, zorder=2)
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
                 ax.add_patch(bezier)
 
     buffer_left_time = -1
@@ -252,5 +259,456 @@ def draw_hypergraph_mpl(
     if save_path:
         plt.savefig(save_path, bbox_inches='tight', dpi=dpi)
     if ax is None:
+        if display_width is not None:
+            # Save to buffer and return HTML img tag with specified width
+            from IPython.display import HTML
+            from io import BytesIO
+            import base64
+            buf = BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
+            buf.seek(0)
+            plt.close(fig)
+            img_data = base64.b64encode(buf.read()).decode('utf-8')
+            return HTML(f'<img src="data:image/png;base64,{img_data}" width="{display_width}" />')
+        else:
+            plt.show()
+    return ax
+
+
+def draw_subgraph_mpl(
+    H,
+    assignment,
+    qpu_info,
+    network=None,
+    node_map=None,
+    xscale=None,
+    yscale=None,
+    show_labels=True,
+    invert_colors=False,
+    fill_background=True,
+    remove_intermediate_roots=False,
+    ax=None,
+    figsize=None,
+    save_path=None,
+    dpi=150,
+    display_width=None,
+):
+    """
+    Draw a subgraph with dummy nodes using matplotlib.
+    Similar to draw_hypergraph_mpl but handles dummy nodes specially.
+    """
+    from disqco.drawing.map_positions import find_node_layout_sparse
+    
+    if isinstance(qpu_info, dict):
+        qpu_sizes = list(qpu_info.values())
+    else:
+        qpu_sizes = qpu_info
+    
+    depth = getattr(H, 'depth', 0)
+    num_qubits = getattr(H, 'num_qubits', 0)
+    num_qubits_phys = sum(qpu_sizes)
+
+    if xscale is None:
+        xscale = 10.0 / depth if depth else 1
+    if yscale is None:
+        yscale = 6.0 / num_qubits if num_qubits else 1
+
+    node_scale = min(0.6, max(0.3, 1.0 / (max(depth, num_qubits) ** 0.5)))
+    gate_node_scale = node_scale * 1.2
+    small_node_scale = node_scale * 0.5
+    dummy_node_scale = node_scale * 2.0
+
+    # Use sparse layout for subgraphs - returns dict mapping node -> y_position
+    node_positions_dict = find_node_layout_sparse(
+        graph=H,
+        assignment=assignment,
+        qpu_sizes=qpu_info,
+        node_map=node_map
+    )
+
+    # Find time bounds
+    if H.nodes:
+        max_time = max(n[1] for n in H.nodes if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy")
+        min_time = min(n[1] for n in H.nodes if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy")
+    else:
+        max_time = depth - 1
+        min_time = 0
+
+    if ax is None:
+        # Calculate adaptive figure size based on circuit dimensions
+        if figsize is None:
+            # Width based on time steps, height based on qubits
+            width = max(4, min(16, (max_time - min_time + 3) * 0.8))
+            height = max(3, min(10, num_qubits_phys * 0.6))
+            figsize = (width, height)
+        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    else:
+        fig = ax.figure
+
+    if fill_background:
+        ax.set_facecolor('black' if invert_colors else 'white')
+    else:
+        ax.set_facecolor('none')
+
+    node_colors = {
+        'black': 'black' if not invert_colors else 'white',
+        'white': 'white',
+        'grey': 'grey',
+        'dummy': 'red',  # Dummy nodes in red
+        'invisible': 'none',
+    }
+    edge_color = 'black' if not invert_colors else 'white'
+    boundary_color = 'black' if not invert_colors else 'white'
+
+    def pick_position(node):
+        # Handle dummy nodes - place on right boundary
+        if isinstance(node, tuple) and len(node) > 2 and node[0] == "dummy":
+            dummy_vertical_shift = 3.0 * yscale
+            partition = node[2]
+            x = (max_time + 2.0) * xscale
+            base_y = node_map[partition] if node_map else partition
+            y = base_y * yscale + dummy_vertical_shift
+            return (x, y)
+        
+        # Regular nodes - use the dictionary returned by find_node_layout_sparse
+        if isinstance(node, tuple) and len(node) == 2:
+            q, t = node
+            x = t * xscale
+            # Get y position from dictionary, with fallback
+            y_pos = node_positions_dict.get(node, q)  # Fallback to qubit index if not found
+            y = (num_qubits_phys - y_pos) * yscale
+            return (x, y)
+        return (0, 0)
+
+    def pick_style(node):
+        # Dummy nodes
+        if isinstance(node, tuple) and len(node) >= 2 and node[0] == "dummy":
+            return 'dummy'
+        
+        # Regular nodes
+        if hasattr(H, 'get_node_attribute'):
+            node_type = H.get_node_attribute(node, 'type', None)
+            if node_type in ("group", "two-qubit"):
+                if H.node_attrs.get(node, {}).get('name') == "target":
+                    return 'white'
+                return 'black'
+            elif node_type == "root_t":
+                if remove_intermediate_roots:
+                    return 'invisible'
+                return 'black'
+            elif node_type == "measure":
+                return 'black'
+            elif node_type == "single-qubit":
+                params = H.get_node_attribute(node, 'params', None)
+                if params is not None and len(params) > 0:
+                    params_sum = sum(abs(x) for x in params)
+                    if params_sum < 1e-10:
+                        return 'invisible'
+                return 'grey'
+        return 'invisible'
+
+    # Build network node positions if network is provided
+    qpu_node_pos = {}
+    if network is not None and hasattr(network, 'qpu_graph'):
+        qpu_x = (max_time + 3.0) * xscale
+        # Calculate y positions for QPU nodes
+        # Boundaries are at (boundary - 0.5), so QPU nodes should be positioned
+        # such that boundaries are at midpoints between them
+        prev_boundary = 0
+        for qpu_node in network.active_nodes:
+            i = node_map[qpu_node] if node_map is not None else qpu_node
+            next_boundary = sum(qpu_sizes[:i+1]) if i < len(qpu_sizes) - 1 else num_qubits_phys
+            # Position QPU at center of partition region
+            y = (num_qubits_phys - (prev_boundary + next_boundary)/2) * yscale
+            qpu_node_pos[qpu_node] = (qpu_x, y)
+            prev_boundary = next_boundary
+        
+        # Position inactive QPU nodes outside the main region
+        for qpu_node in network.qpu_graph.nodes:
+            if qpu_node not in network.active_nodes:
+                if qpu_node > max(network.active_nodes):
+                    y = - num_qubits_phys / len(network.active_nodes) * yscale
+                elif qpu_node < min(network.active_nodes):
+                    y = (num_qubits_phys + num_qubits_phys / len(network.active_nodes)) * yscale
+                else:
+                    y = 0
+                qpu_node_pos[qpu_node] = (qpu_x, y)
+    
+    node_pos = {}
+    for n in H.nodes:
+        # Handle dummy nodes - map to network QPU positions
+        if isinstance(n, tuple) and len(n) > 2 and n[0] == "dummy":
+            partition = n[2]
+            if network is not None and partition in qpu_node_pos:
+                # Use QPU node position for dummy nodes
+                node_pos[n] = qpu_node_pos[partition]
+            else:
+                # Fallback to old position
+                x, y = pick_position(n)
+                node_pos[n] = (x, y)
+            continue  # Don't draw dummy nodes separately - they'll be part of network
+        
+        x, y = pick_position(n)
+        node_pos[n] = (x, y)
+        style = pick_style(n)
+        color = node_colors.get(style, 'grey')
+        if style == 'invisible':
+            continue
+        
+        # Different sizes for different node types
+        if isinstance(n, tuple) and len(n) == 3:
+            size = 200 * gate_node_scale
+            marker = 'o'
+        else:
+            size = 200 * node_scale
+            marker = 'o'
+        
+        ax.scatter(x, y, s=size, c=color, edgecolors='k', marker=marker, zorder=3)
+        
+        if show_labels and style != 'dummy':
+            if isinstance(n, tuple) and len(n) == 2:
+                q, t = n
+                extra = ""
+                n_type = H.get_node_attribute(n, 'type', None) if hasattr(H, 'get_node_attribute') else None
+                if n_type == 'measure':
+                    cbit = H.get_node_attribute(n, 'measurement_bit', None)
+                    if cbit is not None:
+                        extra = f"c{cbit}"
+                elif hasattr(H, 'get_node_attribute') and H.get_node_attribute(n, 'classically_controlled', False):
+                    reg = H.get_node_attribute(n, 'control_register', None)
+                    val = H.get_node_attribute(n, 'control_val', None)
+                    if reg is not None and val is not None:
+                        extra = f"{reg}=={val}"
+                    else:
+                        cbit = H.get_node_attribute(n, 'control_bit', None)
+                        if cbit is not None:
+                            extra = f"c{cbit}"
+                ax.text(x, y+0.12, f"({q},{t})", fontsize=8, ha='center', va='bottom', color='k' if not invert_colors else 'w', zorder=4)
+                if extra:
+                    ax.text(x, y-0.12, f"{extra}", fontsize=8, ha='center', va='top', color='k' if not invert_colors else 'w', zorder=4)
+
+    # Draw edges (same as regular version)
+    for edge_id, edge_info in getattr(H, 'hyperedges', {}).items() if hasattr(H, 'hyperedges') else []:
+        roots = list(edge_info['root_set'])
+        receivers = list(edge_info['receiver_set'])
+        all_nodes = roots + receivers
+        if len(all_nodes) == 2:
+            n1, n2 = all_nodes
+            x1, y1 = node_pos.get(n1, (0, 0))
+            x2, y2 = node_pos.get(n2, (0, 0))
+            
+            # Check if this is a state edge (same qubit, including dummy nodes)
+            # For edges involving dummy nodes, check if the non-dummy node's qubit matches
+            # by checking if both nodes have the same first element (qubit index)
+            is_state_edge = False
+            
+            n1_is_dummy = isinstance(n1, tuple) and len(n1) > 2 and n1[0] == "dummy"
+            n2_is_dummy = isinstance(n2, tuple) and len(n2) > 2 and n2[0] == "dummy"
+            
+            if not n1_is_dummy and not n2_is_dummy:
+                # Both are regular nodes - check if same qubit
+                if (isinstance(n1, tuple) and isinstance(n2, tuple) 
+                    and len(n1) == 2 and len(n2) == 2 
+                    and n1[0] == n2[0]):
+                    is_state_edge = True
+            elif n1_is_dummy or n2_is_dummy:
+                # One or both are dummy nodes
+                # State edges to dummy nodes are those where the edge ID suggests same qubit continuation
+                # Check if edge_id is a simple tuple like ((q,t1), (q,t2)) pattern
+                if isinstance(edge_id, tuple) and len(edge_id) == 2:
+                    id1, id2 = edge_id
+                    if (isinstance(id1, tuple) and isinstance(id2, tuple) 
+                        and len(id1) == 2 and len(id2) == 2
+                        and id1[0] == id2[0]):  # Same qubit in edge ID
+                        is_state_edge = True
+            
+            if is_state_edge:
+                # State edges should be straight lines
+                ax.plot([x1, x2], [y1, y2], color=edge_color, lw=1, zorder=2)
+            elif (
+                isinstance(n1, tuple) and isinstance(n2, tuple)
+                and len(n1) == 2 and len(n2) == 2
+                and n1[0] != n2[0]
+            ):
+                # Gate edges between different qubits (both regular nodes)
+                dx = abs(x2 - x1)
+                dy = abs(y2 - y1)
+                x_offset = 0.3 * max(dx, dy * 0.5)
+                y_offset = 0.1 * dy
+                mx = (x1 + x2) / 2 + x_offset
+                my = (y1 + y2) / 2 + (y_offset if y2 > y1 else -y_offset)
+                verts = [(x1, y1), (mx, my), (x2, y2)]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
+                ax.add_patch(bezier)
+        elif roots and receivers:
+            earliest_root = min(roots, key=lambda n: node_pos.get(n, (float('inf'), 0))[0])
+            if earliest_root in node_pos:
+                first_root_x = node_pos[earliest_root][0]
+                central_x = first_root_x + 0.5 * xscale
+            else:
+                central_x = 0
+            rec_ys = [node_pos[n][1] for n in receivers if n in node_pos]
+            root_y = node_pos[earliest_root][1] if earliest_root in node_pos else 0
+            if rec_ys:
+                avg_rec_y = sum(rec_ys) / len(rec_ys)
+                if avg_rec_y > root_y:
+                    central_y = root_y + 0.5 * yscale
+                else:
+                    central_y = root_y - 0.5 * yscale
+            else:
+                central_y = root_y
+            
+            for root in roots:
+                x0, y0 = node_pos.get(root, (0, 0))
+                x_offset = 0.3 * abs(central_x - x0)
+                mx = (x0 + central_x) / 2 + x_offset
+                my = (y0 + central_y) / 2
+                verts = [(x0, y0), (mx, my), (central_x, central_y)]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
+                ax.add_patch(bezier)
+            
+            for rec in receivers:
+                x1, y1 = node_pos.get(rec, (0, 0))
+                x_offset = 0.3 * abs(x1 - central_x)
+                mx = (central_x + x1) / 2 + x_offset
+                my = (central_y + y1) / 2
+                verts = [(central_x, central_y), (mx, my), (x1, y1)]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', ec=edge_color, lw=1, zorder=2)
+                ax.add_patch(bezier)
+
+    # Draw boundary nodes at left and right edges
+    buffer_left_time = min_time - 1
+    buffer_right_time = max_time + 1
+    
+    # Get all qubits that appear in the subgraph
+    subgraph_qubits = set()
+    for n in H.nodes:
+        if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy":
+            subgraph_qubits.add(n[0])
+    
+    # Track which qubits exist at boundary time steps
+    qubits_at_min_time = set()
+    qubits_at_max_time = set()
+    for n in H.nodes:
+        if isinstance(n, tuple) and len(n) == 2 and n[0] != "dummy":
+            q, t = n
+            if t == min_time:
+                qubits_at_min_time.add(q)
+            if t == max_time:
+                qubits_at_max_time.add(q)
+    
+    for qubit in sorted(subgraph_qubits):
+        # Left boundary node - only if qubit exists at min_time
+        if qubit in qubits_at_min_time:
+            left_x = buffer_left_time * xscale
+            left_y_pos = node_positions_dict.get((qubit, min_time), qubit)
+            left_y = (num_qubits_phys - left_y_pos) * yscale
+            ax.scatter(left_x, left_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+            # Label q_i on the left
+            ax.text(left_x-0.4, left_y, f"$q_{{{qubit}}}$", fontsize=11, ha='right', va='center', 
+                   color='k' if not invert_colors else 'w', zorder=4)
+            # Connect to first node
+            if (qubit, min_time) in node_pos:
+                first_node_x, first_node_y = node_pos[(qubit, min_time)]
+                ax.plot([left_x, first_node_x], [left_y, first_node_y], color=edge_color, lw=1, zorder=2)
+        
+        # Right boundary node - only if qubit exists at max_time
+        if qubit in qubits_at_max_time:
+            right_x = buffer_right_time * xscale
+            right_y_pos = node_positions_dict.get((qubit, max_time), qubit)
+            right_y = (num_qubits_phys - right_y_pos) * yscale
+            ax.scatter(right_x, right_y, s=100*small_node_scale, c='w', edgecolors='k', zorder=3)
+            # Connect to last node
+            if (qubit, max_time) in node_pos:
+                last_node_x, last_node_y = node_pos[(qubit, max_time)]
+                ax.plot([last_node_x, right_x], [last_node_y, right_y], color=edge_color, lw=1, zorder=2)
+
+    # Draw partition boundaries
+    for i in range(1, len(qpu_sizes)):
+        boundary = sum(qpu_sizes[:i])
+        line_y = (num_qubits_phys - boundary - 0.5) * yscale
+        ax.axhline(line_y, color=boundary_color, linestyle='--', lw=1, zorder=10)
+
+    # Draw mini QPU network graph (replaces Q labels)
+    if network is not None and hasattr(network, 'qpu_graph'):
+        qpu_graph = network.qpu_graph
+        
+        # Calculate QPU node size based on figure dimensions and circuit size
+        # Get figure size
+        fig_width, fig_height = fig.get_size_inches()
+        # Scale factor based on figure size (smaller figures need smaller nodes)
+        fig_scale = min(fig_width / 10.0, fig_height / 6.0)
+        qpu_node_size_base = min(1.5, max(0.6, 8.0 / num_qubits)) * fig_scale
+        
+        for qpu_node in network.qpu_graph.nodes:
+            if qpu_node in qpu_node_pos:
+                qpu_x, qpu_y = qpu_node_pos[qpu_node]
+                # Color based on active/inactive
+                if qpu_node in network.active_nodes:
+                    node_color = 'royalblue'
+                else:
+                    node_color = 'lightgray'
+                
+                # Draw QPU node with size scaled to figure
+                qpu_size = 1600 * qpu_node_size_base
+                ax.scatter(qpu_x, qpu_y, s=qpu_size, c=node_color, edgecolors='k', 
+                          marker='o', linewidths=1.5, zorder=20)
+                
+                # Add label with size scaled to figure
+                label_fontsize = max(8, min(20, 150 / num_qubits * fig_scale))
+                label_color = 'k' if not invert_colors else 'w'
+                ax.text(qpu_x, qpu_y, f"$Q_{{{qpu_node}}}$", fontsize=label_fontsize, 
+                       ha='center', va='center', color=label_color, weight='bold', zorder=21)
+        
+        # Draw edges between QPU nodes
+        for idx, (src, tgt) in enumerate(qpu_graph.edges()):
+            if src in qpu_node_pos and tgt in qpu_node_pos:
+                x1, y1 = qpu_node_pos[src]
+                x2, y2 = qpu_node_pos[tgt]
+                
+                # Draw curved edges with alternating bends
+                dx = x2 - x1
+                dy = y2 - y1
+                
+                # Alternate bend direction
+                if idx % 2 == 0:
+                    bend_factor = 0.2
+                else:
+                    bend_factor = -0.2
+                
+                # Control point for bezier curve
+                mx = (x1 + x2) / 2 + bend_factor * abs(dy)
+                my = (y1 + y2) / 2
+                
+                # Draw bezier curve
+                verts = [(x1, y1), (mx, my), (x2, y2)]
+                codes = [MplPath.MOVETO, MplPath.CURVE3, MplPath.CURVE3]
+                bezier = patches.PathPatch(MplPath(verts, codes), fc='none', 
+                                          ec='black', lw=1.5, zorder=19)
+                ax.add_patch(bezier)
+
+    ax.set_aspect('equal')
+    ax.axis('off')
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=dpi)
+    
+    if display_width is not None:
+        # Save to buffer and return HTML img tag with specified width
+        from IPython.display import HTML
+        from io import BytesIO
+        import base64
+        fig = ax.figure
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=dpi)
+        buf.seek(0)
+        plt.close(fig)
+        img_data = base64.b64encode(buf.read()).decode('utf-8')
+        return HTML(f'<img src="data:image/png;base64,{img_data}" width="{display_width}" />')
+    else:
         plt.show()
+    
     return ax
