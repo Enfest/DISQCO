@@ -453,21 +453,39 @@ class QuantumCircuitHyperGraph:
             )
 
         elif output == 'mpl':
-            from disqco.drawing.mpl_drawing import draw_hypergraph_mpl
-            if qpu_info is None and network is not None:
-                qpu_info = network.qpu_sizes
-            elif qpu_info is None:
-                qpu_info = {0: self.num_qubits}
-            if assignment is None:
-                # fallback: all to partition 0
-                assignment = np.zeros((self.depth, self.num_qubits), dtype=int)
-            return draw_hypergraph_mpl(
-                self,
-                assignment,
-                qpu_info,
-                show_labels=show_labels,
-                **kwargs,
-            )
+            if self.is_subgraph():
+                from disqco.drawing.mpl_drawing import draw_subgraph_mpl
+                if qpu_info is None and network is not None:
+                    qpu_info = network.qpu_sizes
+                elif qpu_info is None:
+                    qpu_info = {0: self.num_qubits}
+                if assignment is None:
+                    # fallback: all to partition 0
+                    assignment = np.zeros((self.depth, self.num_qubits), dtype=int)
+                return draw_subgraph_mpl(
+                    self,
+                    assignment,
+                    qpu_info,
+                    network=network,
+                    show_labels=show_labels,
+                    **kwargs,
+                )
+            else:
+                from disqco.drawing.mpl_drawing import draw_hypergraph_mpl
+                if qpu_info is None and network is not None:
+                    qpu_info = network.qpu_sizes
+                elif qpu_info is None:
+                    qpu_info = {0: self.num_qubits}
+                if assignment is None:
+                    # fallback: all to partition 0
+                    assignment = np.zeros((self.depth, self.num_qubits), dtype=int)
+                return draw_hypergraph_mpl(
+                    self,
+                    assignment,
+                    qpu_info,
+                    show_labels=show_labels,
+                    **kwargs,
+                )
         else:
             raise ValueError(f"Unknown output type: {output}. Use 'tikz' or 'mpl'.")
 
