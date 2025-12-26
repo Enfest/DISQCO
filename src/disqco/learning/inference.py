@@ -514,7 +514,7 @@ def check_smart_redundancy(timeline):
 # --- UPDATED MAIN EXECUTION BLOCK ---
 if __name__ == "__main__":
     # 1. Define Circuit
-    qc = cp_fraction(model_config['num_qubits'], depth=8, fraction=0.5, seed=42)
+    qc = cp_fraction(model_config['num_qubits'], depth=5, fraction=0.5, seed=42)
     model_path = os.path.join(model_config['save_dir'], "best_model.pt")
     
     if os.path.exists(model_path):

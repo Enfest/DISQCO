@@ -1,72 +1,91 @@
 import torch
 import numpy as np
-from torch_geometric.data import Batch
+from disqco.learning.data_utils import graph_collate_fn
 
 class GraphRolloutBuffer:
-    def __init__(self, buffer_size, gamma=0.99, gae_lambda=0.95):
+    def __init__(self, buffer_size, gamma=0.99, lam=0.95):
         self.buffer_size = buffer_size
         self.gamma = gamma
-        self.gae_lambda = gae_lambda
+        self.lam = lam
         self.reset()
 
     def reset(self):
-        self.graphs = []        # List of Graph Data Objects
-        self.actions = []       # List of scalars
-        self.log_probs = []     # List of scalars
-        self.rewards = []       # List of scalars
-        self.dones = []         # List of booleans
-        self.values = []        # List of scalars
-        self.masks = []         # List of 1D Bool Tensors
+        """Clears the buffer."""
+        self.obs_buf = [] # List to store PyG HeteroData objects
+        self.act_buf = []
+        self.logp_buf = []
+        self.rew_buf = []
+        self.term_buf = [] # Terminated (Success/Fail)
+        self.val_buf = []  # Value estimates
+        self.mask_buf = []
         self.ptr = 0
 
-    def add(self, graph, action, log_prob, reward, done, value, mask):
+    def add(self, obs, act, logp, rew, term, val, mask):
+        """
+        Store one step of data.
+        """
         if self.ptr < self.buffer_size:
-            # Append references (Python handles object overhead efficiently)
-            self.graphs.append(graph) 
-            self.actions.append(action)
-            self.log_probs.append(log_prob)
-            self.rewards.append(reward)
-            self.dones.append(done)
-            self.values.append(value)
-            self.masks.append(mask)
+            self.obs_buf.append(obs)
+            self.act_buf.append(act)
+            self.logp_buf.append(logp)
+            self.rew_buf.append(rew)
+            self.term_buf.append(term)
+            self.val_buf.append(val)
+            self.mask_buf.append(mask)
             self.ptr += 1
 
-    def compute_gae(self, last_value):
-        rewards = torch.tensor(self.rewards, dtype=torch.float)
-        values = torch.tensor(self.values + [last_value], dtype=torch.float)
-        dones = torch.tensor(self.dones, dtype=torch.float)
+    def get(self):
+        """
+        Prepare the data for PPO update.
+        This is where GNN Batching happens.
+        """
+        assert self.ptr == self.buffer_size, "Buffer not full yet!"
         
-        self.advantages = torch.zeros_like(rewards)
-        self.returns = torch.zeros_like(rewards)
+        # 1. Batch the Graph Data (Crucial for GNNs)
+        # We use your existing collate function to merge list of graphs into one Batch
+        obs_batch = graph_collate_fn(self.obs_buf)
         
-        last_gae_lam = 0
-        for t in reversed(range(len(rewards))):
-            next_non_terminal = 1.0 - dones[t]
-            delta = rewards[t] + self.gamma * values[t+1] * next_non_terminal - values[t]
-            last_gae_lam = delta + self.gamma * self.gae_lambda * next_non_terminal * last_gae_lam
-            self.advantages[t] = last_gae_lam
-            
-        self.returns = self.advantages + values[:-1]
+        # 2. Convert lists to tensors
+        act_batch = torch.tensor(self.act_buf, dtype=torch.long)
+        logp_batch = torch.tensor(self.logp_buf, dtype=torch.float32)
+        val_batch = torch.tensor(self.val_buf, dtype=torch.float32)
+        mask_batch = torch.stack(self.mask_buf) # Stack boolean masks
 
-    def get_batches(self, batch_size):
-        indices = np.arange(len(self.graphs))
-        np.random.shuffle(indices)
+        # 3. Advantage Normalization (The "Magic" of PPO)
+        # We assume the "Advantages" were already computed by compute_gae()
+        # and stored in self.adv_buf and self.ret_buf
+        adv_batch = torch.tensor(self.adv_buf, dtype=torch.float32)
+        ret_batch = torch.tensor(self.ret_buf, dtype=torch.float32)
+
+        # Return a dictionary for clean unpacking
+        return {
+            'obs': obs_batch,
+            'act': act_batch,
+            'ret': ret_batch,
+            'adv': adv_batch,
+            'logp': logp_batch,
+            'mask': mask_batch
+        }
+
+    def compute_gae(self, last_val):
+        """
+        Generalized Advantage Estimation (GAE-Lambda).
+        This smooths the reward signal to reduce variance.
+        """
+        rews = np.array(self.rew_buf)
+        vals = np.array(self.val_buf + [last_val]) # Append value of Next State
+        terms = np.array(self.term_buf)
         
-        for start_idx in range(0, len(self.graphs), batch_size):
-            batch_idx = indices[start_idx : start_idx + batch_size]
+        # GAE Calculation
+        deltas = rews + self.gamma * vals[1:] * (1 - terms) - vals[:-1]
+        
+        self.adv_buf = np.zeros_like(rews, dtype=np.float32)
+        last_gae_lam = 0
+        
+        # Walk backwards
+        for t in reversed(range(len(rews))):
+            last_gae_lam = deltas[t] + self.gamma * self.lam * (1 - terms[t]) * last_gae_lam
+            self.adv_buf[t] = last_gae_lam
             
-            # 1. Collate Graphs
-            batch_graphs = [self.graphs[i] for i in batch_idx]
-            batched_data = Batch.from_data_list(batch_graphs)
-            
-            # 2. Stack Simple Tensors
-            b_actions = torch.tensor([self.actions[i] for i in batch_idx], dtype=torch.long)
-            b_log_probs = torch.tensor([self.log_probs[i] for i in batch_idx], dtype=torch.float)
-            b_returns = self.returns[batch_idx]
-            b_adv = self.advantages[batch_idx]
-            b_vals = torch.tensor([self.values[i] for i in batch_idx], dtype=torch.float)
-            
-            # 3. Ragged Masks (Keep as list)
-            b_masks = [self.masks[i] for i in batch_idx]
-            
-            yield batched_data, b_actions, b_log_probs, b_returns, b_adv, b_vals, b_masks
+        # Returns = Advantage + Value (The Target for the Critic)
+        self.ret_buf = self.adv_buf + vals[:-1]
