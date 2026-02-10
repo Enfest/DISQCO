@@ -323,6 +323,16 @@ class HypergraphCoarsener:
             level += 1
         
         return H_list, mapping_list
+    
+    def coarsen_static(self, hypergraph):
+        """
+        Coarsen the hypergraph all the way down to a single time layer, and don't add the
+        original hypergraph to the list of hypergraphs. This is for the static mapping case where we only want the coarsest level of MLFM.
+        """
+        depth = hypergraph.depth
+        mapping = {i: set([i]) for i in range(depth)}
+        H_current, mapping = self.coarsen_region(hypergraph, mapping, depth - 1, 0)
+        return [H_current], [mapping]
 
     def coarsen_full_weighted(self, hypergraph, num_levels):
         """

@@ -190,9 +190,10 @@ class QuantumCircuitPartitioner:
 
     def refine_assignment(self, level, num_levels, assignment, mapping_list, sparse=False, full_subgraph=None, next_graph=None, qpu_sizes=None):
         new_assignment = assignment
+
         if sparse:
             return self.refine_assignment_sparse(level, num_levels, assignment, mapping_list, full_subgraph, next_graph, qpu_sizes)
-        if level < num_levels -1:
+        if level <= num_levels - 1:
             mapping = mapping_list[level]
             for super_node_t in mapping:
                 for t in mapping[super_node_t]:
