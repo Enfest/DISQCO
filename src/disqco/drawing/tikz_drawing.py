@@ -1,14 +1,16 @@
 from __future__ import annotations
 from disqco.drawing.map_positions import space_mapping, get_pos_list, get_pos_list_ext, find_node_layout_sparse
 from typing import Dict, Iterable, Union
-from disqco.graphs.quantum_network import QuantumNetwork
+from disqco import QuantumNetwork
 try:
     from IPython.core.getipython import get_ipython
 except ImportError:
     get_ipython = lambda: None
 import numpy as np
+import shutil
 from disqco.graphs.QC_hypergraph_extended import HyperGraph
-from disqco.parti.FM.FM_methods import set_initial_partition_assignment
+from disqco import set_initial_partition_assignment
+from disqco.drawing.mpl_drawing import draw_hypergraph_mpl
 # 
 
 def hypergraph_to_tikz(
@@ -61,7 +63,6 @@ def hypergraph_to_tikz(
 
     # Build the position map for real (qubit,time) nodes
     space_map = space_mapping(qpu_sizes, depth)
-    # debug prints removed
     pos_list = get_pos_list(H, num_qubits, assignment, space_map)
 
     # If no nodes, handle gracefully
@@ -163,7 +164,9 @@ def hypergraph_to_tikz(
                 try:
                     q, t = assignment_map[node]
                 except KeyError:
-                    # debug prints removed
+                    print(f"assignment_map {assignment_map}.")
+                    print(f'Nodes in graph: {list(H.nodes)}')
+                    print(f'Number of nodes: {len(H.nodes)}')
                     raise KeyError(f"Node {node} not found in assignment_map.")
             else:
                 q, t = node
@@ -353,7 +356,6 @@ def hypergraph_to_tikz(
             node1 = list(root_set)[0]
             node2 = list(rec_set)[0]
             if remove_intermediate_roots:
-                # debug prints removed
                 if node2 in full_root_t_set and node1[1] == node2[1]:
                     continue
             bend = "[style=edgeStyle, bend left=15]" if node1[0] != node2[0] else "[style=edgeStyle]"
@@ -491,7 +493,7 @@ def hypergraph_to_tikz(
     return final_code
 
 def draw_graph_tikz(hypergraph, network = None, assignment = None, invert_colors=False, fill_background=True, assignment_map=None, show_labels=True,
-        tikz_raw = False, remove_intermediate_roots=False, dpi=300):
+        tikz_raw = False, remove_intermediate_roots=False, dpi=300, display_width=None):
     """
     Jupyter convenience function to compile & display the TikZ code inline.
     """
@@ -520,9 +522,29 @@ def draw_graph_tikz(hypergraph, network = None, assignment = None, invert_colors
     )
     if tikz_raw:
         return tikz_code
+    
+    # Check if pdflatex is available
+    if shutil.which('pdflatex') is None:
+        print("⚠️  Warning: pdflatex not found on system PATH.")
+        print("    Falling back to matplotlib-based drawing.")
+        print("    Tip: Set tikz_raw=True to get raw TikZ code instead.")
+        return draw_hypergraph_mpl(
+            H=hypergraph,
+            assignment=assignment,
+            qpu_info=qpu_sizes,
+            invert_colors=invert_colors,
+            fill_background=fill_background,
+            assignment_map=assignment_map,
+            show_labels=show_labels,
+            remove_intermediate_roots=remove_intermediate_roots,
+            dpi=dpi,
+            display_width=display_width
+        )
+    
     ip = get_ipython()
     args = f"-f -r --dpi={dpi}"
-    return ip.run_cell_magic('tikz', args, tikz_code)
+    ip.run_cell_magic('tikz', args, tikz_code)
+    return 
 
 def hypergraph_to_tikz_v2(
     H : HyperGraph,
@@ -647,10 +669,10 @@ def hypergraph_to_tikz_v2(
             _, p, pprime = node
             # Example: place them in a single row at y = num_qubits_phys+2
             # and x offset = partition p + some shift
-            # debug prints removed
+            # print(f"Dummy node: {node}")
             x = (depth/len(qpu_sizes) *(pprime-1)) * xscale * 1.2 + x_offset  # scale horizontally by pprime
             y = (-2) * yscale * 0.8
-            # debug prints removed
+            # print(f"Dummy node position: (x={x}, y={y})")
             return (x, y)
         # else:
         #     # If for some reason it's a dummy node of a different shape:
@@ -975,12 +997,15 @@ def draw_graph_tikz_v2(
     depth: int,
     num_qubits: int,
     show_labels: bool = True,
+    dpi: int = 400,
+    display_width=None,
     **kwargs,
 ):
     """Compile & render the TikZ code inline in a Jupyter notebook."""
     code = hypergraph_to_tikz_v2(H, qubit_assignment, gate_assignment, qpu_info, depth=depth, num_qubits=num_qubits, show_labels=show_labels, **kwargs)
     ip = get_ipython()
-    return ip.run_cell_magic("tikz", "-f -r --dpi=400", code)
+    args = f"-f -r --dpi={dpi}"
+    return ip.run_cell_magic("tikz", args, code)
 
 
 def hypergraph_to_tikz_subgraph(
@@ -1154,7 +1179,7 @@ def hypergraph_to_tikz_subgraph(
     def node_name(n):
         # Validate the node structure to prevent malformed names
         if not isinstance(n, (tuple, list)) or len(n) == 0:
-            # debug prints removed
+            print(f"WARNING: Invalid node structure: {n}")
             return "n_invalid"
         
         # Special handling for dummy nodes
@@ -1165,7 +1190,7 @@ def hypergraph_to_tikz_subgraph(
                 if isinstance(part, (int, float, str)):
                     name_parts.append(str(part))
                 else:
-                    # debug prints removed
+                    print(f"WARNING: Invalid part in dummy node: {part}")
                     name_parts.append("invalid")
 
             # return "n_" + "_".join(name_parts)
@@ -1175,7 +1200,7 @@ def hypergraph_to_tikz_subgraph(
         try:
             return "n_" + "_".join(str(x) for x in n)
         except Exception as e:
-            # debug prints removed
+            print(f"ERROR in node_name for {n}: {e}")
             return "n_error"
 
     # Build TikZ code
@@ -1424,18 +1449,18 @@ def hypergraph_to_tikz_subgraph(
             for rnode in receivers:
                 # Skip if receiver is the same as root node (prevents self-connections)
                 if rnode == root_node:
-                    # debug prints removed
+                    print(f"DEBUG: Skipping self-connection for node {rnode}")
                     continue
                 
                 # Validate receiver node structure
                 if not isinstance(rnode, (tuple, list)) or len(rnode) == 0:
-                    # debug prints removed
+                    print(f"DEBUG: Skipping invalid receiver node: {rnode}")
                     continue
                 
                 # Get valid node names
                 rnode_name = node_name(rnode)
                 if "invalid" in rnode_name or "error" in rnode_name:
-                    # debug prints removed
+                    print(f"DEBUG: Skipping receiver with invalid name: {rnode} -> {rnode_name}")
                     continue
                     
                 # Special handling for dummy nodes - use thick straight lines
@@ -1453,13 +1478,13 @@ def hypergraph_to_tikz_subgraph(
                     if not remove_intermediate_roots:
                         # Validate root node structure
                         if not isinstance(rnode, (tuple, list)) or len(rnode) == 0:
-                            # debug prints removed
+                            print(f"DEBUG: Skipping invalid root node: {rnode}")
                             continue
                         
                         # Get valid node name
                         rnode_name = node_name(rnode)
                         if "invalid" in rnode_name or "error" in rnode_name:
-                            # debug prints removed
+                            print(f"DEBUG: Skipping root with invalid name: {rnode} -> {rnode_name}")
                             continue
                         
                         # If there's more than one 'root' in root_set, also connect them
@@ -1483,31 +1508,30 @@ def hypergraph_to_tikz_subgraph(
             node1 = list(root_set)[0]
             node2 = list(rec_set)[0]
             if remove_intermediate_roots:
-                # debug prints removed
                 if node2 in full_root_t_set and node1[1] == node2[1]:
                     continue
             
             # Validate both nodes before creating edge
             if not isinstance(node1, (tuple, list)) or len(node1) == 0:
-                # debug prints removed
+                print(f"DEBUG: Skipping edge with invalid node1: {node1}")
                 continue
             if not isinstance(node2, (tuple, list)) or len(node2) == 0:
-                # debug prints removed
+                print(f"DEBUG: Skipping edge with invalid node2: {node2}")
                 continue
                 
             # Prevent self-connections
             if node1 == node2:
-                # debug prints removed
+                print(f"DEBUG: Skipping self-connection: {node1} -> {node2}")
                 continue
             
             # Get valid node names
             node1_name = node_name(node1)
             node2_name = node_name(node2)
             if "invalid" in node1_name or "error" in node1_name:
-                # debug prints removed
+                print(f"DEBUG: Skipping edge with invalid node1 name: {node1} -> {node1_name}")
                 continue
             if "invalid" in node2_name or "error" in node2_name:
-                # debug prints removed
+                print(f"DEBUG: Skipping edge with invalid node2 name: {node2} -> {node2_name}")
                 continue
             
             # Check if nodes are on same qubit for straight line (v[0] = u[0])
@@ -1625,7 +1649,8 @@ def draw_subgraph_tikz(
     show_labels=True,
     tikz_raw=False, 
     remove_intermediate_roots=False,
-    dpi=300
+    dpi=300,
+    display_width=None
 ):
     """
     Jupyter convenience function to compile & display the subgraph TikZ code inline.
@@ -1657,6 +1682,26 @@ def draw_subgraph_tikz(
     
     if tikz_raw:
         return tikz_code
+    
+    # Check if pdflatex is available
+    if shutil.which('pdflatex') is None:
+        print("⚠️  Warning: pdflatex not found on system PATH.")
+        print("    Falling back to matplotlib-based drawing.")
+        print("    Tip: Set tikz_raw=True to get raw TikZ code instead.")
+        from disqco.drawing.mpl_drawing import draw_subgraph_mpl
+        return draw_subgraph_mpl(
+            H=H,
+            assignment=assignment,
+            qpu_info=qpu_info,
+            network=network,
+            node_map=node_map,
+            invert_colors=invert_colors,
+            fill_background=fill_background,
+            show_labels=show_labels,
+            remove_intermediate_roots=remove_intermediate_roots,
+            dpi=dpi,
+            display_width=display_width
+        )
         
     ip = get_ipython()
     if ip is not None:

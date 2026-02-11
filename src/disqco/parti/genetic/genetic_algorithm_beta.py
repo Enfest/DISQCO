@@ -499,10 +499,17 @@ def search_mutation(graph, partition, num_partitions, qpu_info, num_qubits_log, 
         counts = [0 for _ in range(num_partitions)]
         for element in partition_layer:
             counts[int(element)] += 1
+        
+        destination = None
         for part in range(num_partitions):
             if counts[part] < qpu_info[part]:
                 destination = part
                 break
+        
+        # Skip this iteration if no partition has space
+        if destination is None:
+            continue
+            
         # start = time.time()
         gain, stop = calculate_cost_interval(graph,partition,qpu_info,start,destination,qubit,num_layers,num_partitions,costs)
         # end = time.time()

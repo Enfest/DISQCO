@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import time
 from disqco.graphs.QC_hypergraph import QuantumCircuitHyperGraph
+
 class HypergraphCoarsener:
     """
     A class that provides various coarsening methods for a quantum-circuit hypergraph.
@@ -54,8 +55,10 @@ class HypergraphCoarsener:
             old_node_type = H_new.get_node_attribute(old_node, "type")
             new_node_type = H_new.get_node_attribute(new_node, "type")
 
-            if old_node_type != None and new_node_type != None:
-                H_new.set_node_attribute(new_node, "type", 'two-qubit')
+            # Merge node types, preserving the more important one
+            merged_type = _merge_node_types(old_node_type, new_node_type)
+            if merged_type is not None:
+                H_new.set_node_attribute(new_node, "type", merged_type)
 
 
             edges_to_remove = []
@@ -189,8 +192,10 @@ class HypergraphCoarsener:
         old_node_type = H_new.get_node_attribute(source_node, "type")
         new_node_type = H_new.get_node_attribute(target_node, "type")
 
-        if old_node_type != None and new_node_type != None:
-            H_new.set_node_attribute(target_node, "type", 'two-qubit')
+        # Merge node types, preserving the more important one
+        merged_type = _merge_node_types(old_node_type, new_node_type)
+        if merged_type is not None:
+            H_new.set_node_attribute(target_node, "type", merged_type)
 
         # print("merging nodes", source_node, target_node)
         edges_to_remove = []
@@ -318,6 +323,16 @@ class HypergraphCoarsener:
             level += 1
         
         return H_list, mapping_list
+    
+    def coarsen_static(self, hypergraph):
+        """
+        Coarsen the hypergraph all the way down to a single time layer, and don't add the
+        original hypergraph to the list of hypergraphs. This is for the static mapping case where we only want the coarsest level of MLFM.
+        """
+        depth = hypergraph.depth
+        mapping = {i: set([i]) for i in range(depth)}
+        H_current, mapping = self.coarsen_region(hypergraph, mapping, depth - 1, 0)
+        return [H_current], [mapping]
 
     def coarsen_full_weighted(self, hypergraph, num_levels):
         """
@@ -1345,3 +1360,33 @@ class HypergraphCoarsener:
 
         return new_H
                                   
+def _get_node_type_priority(node_type):
+    """
+    Return priority for node types. Higher priority types should be preserved.
+    Priority order: two-qubit/group > measure > root_t > single-qubit > None
+    """
+    priority_map = {
+        'two-qubit': 5,
+        'group': 5,
+        'measure': 4,
+        'root_t': 3,
+        'single-qubit': 2,
+        None: 1
+    }
+    return priority_map.get(node_type, 1)
+
+def _merge_node_types(old_type, new_type):
+    """
+    Merge two node types, preserving the one with higher priority.
+    """
+    old_priority = _get_node_type_priority(old_type)
+    new_priority = _get_node_type_priority(new_type)
+    
+    # Return the type with higher priority
+    if old_priority > new_priority:
+        return old_type
+    elif new_priority > old_priority:
+        return new_type
+    else:
+        # Same priority - if both are gate types, keep as is
+        return new_type if new_type else old_type

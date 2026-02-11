@@ -7,6 +7,10 @@ ENV/
 env.bak/
 venv.bak/
 disqco_env
+qpic/
+
+# QASMBench directories and files
+benchmarking/QASMBench
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -43,9 +47,36 @@ MANIFEST
 *QASMBench/
 Demos/beta/QASMBench/
 
-*__pycache__/
+__pycache__/
+.vscode/
+
+.pytest_cache/
 
 Demos/beta/graphs/
+benchmarking/QASMBench
+Demos/QASMBench
+
+# Benchmarking data files (raw results - not committed)
+benchmarking/data/*.json
+benchmarking/benchmark_results_*.json
+benchmarking/benchmark_means_*.json
+benchmarking/metadata_*.json
+
+# Keep the directory structure but not the data
+!benchmarking/data/.gitkeep
+!benchmarking/results/.gitkeep
+
+settings.json
+
+benchmarking/*.dat
+
+*.json
+*.dat
+*.png
+
+benchmarking/old/
+benchmarking/old/
+
 
 wandb/
 learning.zip
