@@ -10,6 +10,8 @@ disqco_env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+src/disqco/__pycache__/
+*__pycache__/
 *.py[cod]
 *$py.class
 
@@ -44,3 +46,9 @@ Demos/beta/QASMBench/
 *__pycache__/
 
 Demos/beta/graphs/
+
+wandb/
+learning.zip
+learning 2.zip
+*.packaging
+*.out
